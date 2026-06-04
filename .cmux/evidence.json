@@ -1,0 +1,8 @@
+{
+  "type": "evidence",
+  "port": 3000,
+  "agentCommand": "pi",
+  "devCommand": "npm run dev",
+  "url": "http://localhost:3000",
+  "workspaceDir": ".workspaces"
+}

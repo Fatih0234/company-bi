@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Evidence generated state
+.evidence/
+build/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local analysis worktrees
+.workspaces/
+
+# Local agent/index state
+.agent/
+.pi/todos/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/
