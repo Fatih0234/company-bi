@@ -12,6 +12,7 @@ build/
 
 # Local analysis worktrees
 .workspaces/
+.cmux/workspace.json
 
 # Local agent/index state
 .agent/

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Open a CMUX + Evidence three-pane workspace."""
+"""Open CMUX + Evidence workspaces."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
+import re
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -14,11 +15,39 @@ from typing import Any
 
 
 DEFAULT_PORT = 3000
+DEFAULT_ANALYSIS_BASE_PORT = 3100
+PORT_RANGE_SIZE = 100
 
 
 def error(message: str) -> int:
     print(message, file=sys.stderr)
     return 2
+
+
+def run_git(root: Path, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=check,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def git_root(path: Path) -> Path | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    return Path(result.stdout.strip()).resolve()
 
 
 def load_config(marker: Path) -> dict[str, Any]:
@@ -35,6 +64,85 @@ def load_config(marker: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid {marker}: expected type='evidence', got {marker_type!r}")
 
     return config
+
+
+def load_project(target: Path) -> tuple[Path, dict[str, Any]]:
+    target = target.expanduser().resolve()
+    if not target.exists() or not target.is_dir():
+        raise ValueError(f"Target is not a directory: {target}")
+
+    marker = target / ".cmux" / "evidence.json"
+    if not marker.exists():
+        raise ValueError(f"Not an Evidence CMUX workspace: {target}\nMissing .cmux/evidence.json")
+
+    return target, load_config(marker)
+
+
+def slugify(value: str) -> str:
+    value = value.lower()
+    value = re.sub(r"[^a-z0-9]+", "-", value)
+    value = value.strip("-")
+    return value or "untitled-analysis"
+
+
+def branch_exists(root: Path, branch: str) -> bool:
+    result = run_git(root, ["rev-parse", "--verify", branch], check=False)
+    return result.returncode == 0
+
+
+def unique_slug(base_slug: str, root: Path, workspace_dir: Path) -> str:
+    slug = base_slug
+    i = 2
+    while (workspace_dir / slug).exists() or branch_exists(root, f"analysis/{slug}"):
+        slug = f"{base_slug}-{i}"
+        i += 1
+    return slug
+
+
+def port_is_free(port: int) -> bool:
+    checks = [
+        (socket.AF_INET, "127.0.0.1"),
+        (socket.AF_INET6, "::1"),
+    ]
+    for family, host in checks:
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                s.settimeout(0.25)
+                if s.connect_ex((host, port)) == 0:
+                    return False
+        except OSError:
+            continue
+    return True
+
+
+def used_workspace_ports(workspace_dir: Path) -> set[int]:
+    ports: set[int] = set()
+    if not workspace_dir.exists():
+        return ports
+
+    for path in workspace_dir.glob("*/.cmux/*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        try:
+            ports.add(int(data["port"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return ports
+
+
+def choose_port(base_port: int, workspace_dir: Path) -> int:
+    used_ports = used_workspace_ports(workspace_dir)
+    for port in range(base_port, base_port + PORT_RANGE_SIZE):
+        if port not in used_ports and port_is_free(port):
+            return port
+    raise RuntimeError(
+        f"No free Evidence analysis ports found in range {base_port}-{base_port + PORT_RANGE_SIZE - 1}"
+    )
 
 
 def build_layout(
@@ -95,31 +203,9 @@ def build_layout(
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="cmux-evidence",
-        description="Open an Evidence project in a CMUX three-pane workspace.",
-    )
-    parser.add_argument("target", nargs="?", default=".", help="Evidence project directory")
-    parser.add_argument(
-        "--print-layout",
-        action="store_true",
-        help="Print generated CMUX layout JSON instead of opening CMUX",
-    )
-    args = parser.parse_args(argv)
-
-    target = Path(args.target).expanduser().resolve()
-    if not target.exists() or not target.is_dir():
-        return error(f"Target is not a directory: {target}")
-
-    marker = target / ".cmux" / "evidence.json"
-    if not marker.exists():
-        print(f"Not an Evidence CMUX workspace: {target}", file=sys.stderr)
-        print("Missing .cmux/evidence.json", file=sys.stderr)
-        return 2
-
+def open_workspace(target_arg: str | Path = ".", *, print_layout: bool = False) -> int:
     try:
-        config = load_config(marker)
+        target, config = load_project(Path(target_arg))
         port = int(config.get("port", DEFAULT_PORT))
     except (TypeError, ValueError) as exc:
         return error(str(exc))
@@ -135,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         dev_command=dev_command,
     )
 
-    if args.print_layout:
+    if print_layout:
         print(json.dumps(layout, indent=2))
         return 0
 
@@ -167,6 +253,156 @@ def main(argv: list[str] | None = None) -> int:
         return error(f"Failed to run cmux: {exc}")
 
     return completed.returncode
+
+
+def write_analysis_page(path: Path, title: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""# {title}
+
+This is an agent-created Evidence analysis workspace.
+
+## Question
+
+Describe the business question here.
+
+## Draft query
+
+```draft_query
+select 1 as example_metric
+```
+
+<DataTable data={{draft_query}} />
+
+## Notes
+
+Ask Pi to replace this draft with a useful dashboard.
+"""
+    )
+
+
+def new_analysis(title: str, *, print_layout: bool = False) -> int:
+    title = title.strip()
+    if not title:
+        return error('Usage: cmux-evidence new "analysis name"')
+
+    cwd = Path.cwd().resolve()
+    root = git_root(cwd)
+    if root is None:
+        return error("Not inside a Git repository")
+
+    try:
+        root, config = load_project(root)
+    except ValueError as exc:
+        return error(str(exc))
+
+    if cwd != root:
+        return error(f"Run `cmux-evidence new` from the main Evidence project root: {root}")
+
+    workspace_dir = root / str(config.get("workspaceDir") or ".workspaces")
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    base_slug = slugify(title)
+    slug = unique_slug(base_slug, root, workspace_dir)
+    branch = f"analysis/{slug}"
+    worktree_path = workspace_dir / slug
+    page_rel = Path("pages") / "analysis" / f"{slug}.md"
+    page_path = worktree_path / page_rel
+
+    try:
+        analysis_base_port = int(config.get("analysisBasePort", DEFAULT_ANALYSIS_BASE_PORT))
+        port = choose_port(analysis_base_port, workspace_dir)
+    except (TypeError, ValueError, RuntimeError) as exc:
+        return error(str(exc))
+
+    base_branch = str(config.get("baseBranch") or "main")
+
+    try:
+        subprocess.run(
+            ["git", "worktree", "add", "-b", branch, str(worktree_path), base_branch],
+            cwd=root,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        return error(f"Failed to create Git worktree for {branch}: exit {exc.returncode}")
+
+    url = f"http://localhost:{port}/analysis/{slug}"
+    worktree_config = dict(config)
+    worktree_config.update(
+        {
+            "port": port,
+            "devCommand": f"npm run dev -- --port {port}",
+            "url": url,
+        }
+    )
+
+    try:
+        write_analysis_page(page_path, title)
+        (worktree_path / ".cmux" / "evidence.json").write_text(
+            json.dumps(worktree_config, indent=2) + "\n"
+        )
+        (worktree_path / ".cmux" / "workspace.json").write_text(
+            json.dumps(
+                {
+                    "kind": "analysis",
+                    "title": title,
+                    "slug": slug,
+                    "branch": branch,
+                    "port": port,
+                    "page": str(page_rel),
+                    "status": "draft",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    except OSError as exc:
+        return error(f"Created worktree, but failed to write analysis files: {exc}")
+
+    print("Created analysis workspace")
+    print()
+    print(f"Title:  {title}")
+    print(f"Slug:   {slug}")
+    print(f"Branch: {branch}")
+    print(f"Path:   {worktree_path.relative_to(root)}")
+    print(f"Page:   {page_rel}")
+    print(f"Port:   {port}")
+    print()
+    print("Opening CMUX...")
+
+    return open_workspace(worktree_path, print_layout=print_layout)
+
+
+def usage() -> str:
+    return """Usage:
+  cmux-evidence [--print-layout] [path]
+  cmux-evidence open [--print-layout] [path]
+  cmux-evidence new [--print-layout] "analysis name"
+""".rstrip()
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    print_layout = False
+    if "--print-layout" in args:
+        args.remove("--print-layout")
+        print_layout = True
+
+    if not args:
+        return open_workspace(".", print_layout=print_layout)
+
+    command = args[0]
+    if command in {"-h", "--help", "help"}:
+        print(usage())
+        return 0
+
+    if command == "new":
+        return new_analysis(" ".join(args[1:]), print_layout=print_layout)
+
+    if command == "open":
+        return open_workspace(args[1] if len(args) > 1 else ".", print_layout=print_layout)
+
+    return open_workspace(command, print_layout=print_layout)
 
 
 if __name__ == "__main__":
