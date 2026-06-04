@@ -12,6 +12,7 @@
   "dependencies": {
     "@evidence-dev/component-utilities": "4.0.13",
     "@evidence-dev/core-components": "5.4.2",
+    "@evidence-dev/duckdb": "2.0.1",
     "@evidence-dev/evidence": "latest",
     "@evidence-dev/tailwind": "3.1.4"
   },
@@ -31,5 +32,3 @@
     "vite": "5.4.21"
   }
 }
-
-

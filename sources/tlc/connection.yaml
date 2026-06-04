@@ -1,0 +1,5 @@
+# This file configures the local DuckDB source used to read synced TLC files.
+name: tlc
+type: duckdb
+options:
+  filename: ":memory:"

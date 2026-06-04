@@ -5,10 +5,22 @@ node_modules/
 .evidence/
 build/
 
+# Local data lake seed and synced raw data
+.lake_seed/
+data/tlc/raw/
+data/tlc/reference/
+
+# Local database artifacts
+*.duckdb
+*.db
+*.sqlite
+
 # Local environment and secrets
 .env
 .env.*
 !.env.example
+.env.local
+connection.options.yaml
 
 # Local analysis worktrees
 .workspaces/
