@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "scripts/ensure_evidence_sources.sh && evidence dev",
+    "dev": "scripts/run_evidence_dev.sh",
     "sources": "evidence sources",
     "build": "evidence build",
     "build:strict": "evidence build:strict",

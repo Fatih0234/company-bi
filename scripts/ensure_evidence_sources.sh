@@ -44,10 +44,10 @@ bootstrap_from_main_checkout() {
   local main_checkout="$1"
 
   if [[ -f "$main_checkout/$MANIFEST" ]]; then
-    echo "Copying Evidence source manifest/cache from main checkout..."
+    echo "Linking Evidence source manifest/cache from main checkout..."
     mkdir -p ".evidence/template/static"
     rm -rf ".evidence/template/static/data"
-    cp -R "$main_checkout/.evidence/template/static/data" ".evidence/template/static/data"
+    ln -s "$main_checkout/.evidence/template/static/data" ".evidence/template/static/data"
   fi
 
   if [[ ! -e "data/tlc" && -d "$main_checkout/data/tlc" ]]; then
