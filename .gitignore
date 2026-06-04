@@ -9,6 +9,8 @@ build/
 .lake_seed/
 data/tlc/raw/
 data/tlc/reference/
+.minio-data/
+.logs/
 
 # Local database artifacts
 *.duckdb

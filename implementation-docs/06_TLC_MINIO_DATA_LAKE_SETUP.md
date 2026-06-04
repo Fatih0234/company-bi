@@ -642,7 +642,7 @@ npm run sources -- --sources tlc
 If you hit memory issues, use:
 
 ```bash
-NODE_OPTIONS="--max-old-space-size=4096" npm run sources -- --sources tlc
+NODE_OPTIONS="--max-old-space-size=8192" npm run sources -- --sources tlc
 ```
 
 Expected result:
