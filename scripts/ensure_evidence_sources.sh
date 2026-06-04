@@ -13,6 +13,59 @@ if [[ ! -d "sources/tlc" ]]; then
   exit 0
 fi
 
+find_main_checkout() {
+  local candidate
+
+  # Normal layout: main checkout/.workspaces/<analysis-worktree>
+  for candidate in "../.." ".."; do
+    if [[ -f "$candidate/.cmux/evidence.json" && -f "$candidate/$MANIFEST" ]]; then
+      (cd "$candidate" && pwd)
+      return 0
+    fi
+  done
+
+  # Fallback: ask Git for all worktrees and pick the one on branch main with a manifest.
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *) candidate="${line#worktree }" ;;
+      branch\ refs/heads/main)
+        if [[ -n "${candidate:-}" && -f "$candidate/$MANIFEST" ]]; then
+          printf '%s\n' "$candidate"
+          return 0
+        fi
+        ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null || true)
+
+  return 1
+}
+
+bootstrap_from_main_checkout() {
+  local main_checkout="$1"
+
+  if [[ -f "$main_checkout/$MANIFEST" ]]; then
+    echo "Copying Evidence source manifest/cache from main checkout..."
+    mkdir -p ".evidence/template/static"
+    rm -rf ".evidence/template/static/data"
+    cp -R "$main_checkout/.evidence/template/static/data" ".evidence/template/static/data"
+  fi
+
+  if [[ ! -e "data/tlc" && -d "$main_checkout/data/tlc" ]]; then
+    echo "Linking synced TLC data from main checkout..."
+    mkdir -p data
+    ln -s "$main_checkout/data/tlc" "data/tlc"
+  fi
+}
+
+main_checkout="$(find_main_checkout || true)"
+if [[ -n "$main_checkout" ]]; then
+  bootstrap_from_main_checkout "$main_checkout"
+fi
+
+if [[ -f "$MANIFEST" ]]; then
+  exit 0
+fi
+
 load_env_file() {
   local candidate
   for candidate in ".env.local" "../.env.local" "../../.env.local"; do
