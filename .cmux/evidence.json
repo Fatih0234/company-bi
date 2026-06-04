@@ -1,8 +1,8 @@
 {
   "type": "evidence",
-  "port": 3000,
+  "port": 3100,
   "agentCommand": "pi",
-  "devCommand": "npm run dev",
-  "url": "http://localhost:3000",
+  "devCommand": "npm run dev -- --port 3100",
+  "url": "http://localhost:3100",
   "workspaceDir": ".workspaces"
 }

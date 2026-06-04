@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Open a CMUX + Evidence three-pane workspace."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+
+DEFAULT_PORT = 3000
+
+
+def error(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 2
+
+
+def load_config(marker: Path) -> dict[str, Any]:
+    try:
+        config = json.loads(marker.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {marker}: {exc}") from exc
+
+    if not isinstance(config, dict):
+        raise ValueError(f"Invalid {marker}: expected a JSON object")
+
+    marker_type = config.get("type")
+    if marker_type != "evidence":
+        raise ValueError(f"Invalid {marker}: expected type='evidence', got {marker_type!r}")
+
+    return config
+
+
+def build_layout(
+    *,
+    target: Path,
+    url: str,
+    agent_command: str,
+    dev_command: str,
+) -> dict[str, Any]:
+    # Schema matches `cmux new-workspace --layout` / cmux.json layout definitions.
+    return {
+        "direction": "horizontal",
+        "split": 0.5,
+        "children": [
+            {
+                "pane": {
+                    "surfaces": [
+                        {
+                            "type": "terminal",
+                            "title": "Pi Agent",
+                            "command": agent_command,
+                            "cwd": str(target),
+                            "focus": True,
+                        }
+                    ]
+                }
+            },
+            {
+                "direction": "vertical",
+                "split": 0.58,
+                "children": [
+                    {
+                        "pane": {
+                            "surfaces": [
+                                {
+                                    "type": "browser",
+                                    "title": "Evidence Preview",
+                                    "url": url,
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "pane": {
+                            "surfaces": [
+                                {
+                                    "type": "terminal",
+                                    "title": "Evidence Dev",
+                                    "command": dev_command,
+                                    "cwd": str(target),
+                                }
+                            ]
+                        }
+                    },
+                ],
+            },
+        ],
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cmux-evidence",
+        description="Open an Evidence project in a CMUX three-pane workspace.",
+    )
+    parser.add_argument("target", nargs="?", default=".", help="Evidence project directory")
+    parser.add_argument(
+        "--print-layout",
+        action="store_true",
+        help="Print generated CMUX layout JSON instead of opening CMUX",
+    )
+    args = parser.parse_args(argv)
+
+    target = Path(args.target).expanduser().resolve()
+    if not target.exists() or not target.is_dir():
+        return error(f"Target is not a directory: {target}")
+
+    marker = target / ".cmux" / "evidence.json"
+    if not marker.exists():
+        print(f"Not an Evidence CMUX workspace: {target}", file=sys.stderr)
+        print("Missing .cmux/evidence.json", file=sys.stderr)
+        return 2
+
+    try:
+        config = load_config(marker)
+        port = int(config.get("port", DEFAULT_PORT))
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    url = str(config.get("url") or f"http://localhost:{port}")
+    agent_command = str(config.get("agentCommand") or "pi")
+    dev_command = str(config.get("devCommand") or "npm run dev")
+
+    layout = build_layout(
+        target=target,
+        url=url,
+        agent_command=agent_command,
+        dev_command=dev_command,
+    )
+
+    if args.print_layout:
+        print(json.dumps(layout, indent=2))
+        return 0
+
+    real_cmux = (
+        os.environ.get("CMUX_EVIDENCE_REAL_CMUX")
+        or os.environ.get("CMUX_REAL_BIN")
+        or shutil.which("cmux")
+    )
+    if not real_cmux:
+        return error("Could not find cmux binary")
+
+    command = [
+        real_cmux,
+        "workspace",
+        "create",
+        "--name",
+        target.name,
+        "--cwd",
+        str(target),
+        "--layout",
+        json.dumps(layout, separators=(",", ":")),
+        "--focus",
+        "true",
+    ]
+
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as exc:
+        return error(f"Failed to run cmux: {exc}")
+
+    return completed.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

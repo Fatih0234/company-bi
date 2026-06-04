@@ -17,6 +17,10 @@ build/
 .agent/
 .pi/todos/
 
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Logs
 *.log
 npm-debug.log*
