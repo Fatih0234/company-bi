@@ -10,7 +10,7 @@ Ask Pi to turn this Markdown file into an Evidence dashboard.
 - Keep analysis-specific work in this page.
 - Avoid editing shared data-source configuration.
 
-```draft_query
+```sql draft_query
 select 1 as example_metric
 ```
 

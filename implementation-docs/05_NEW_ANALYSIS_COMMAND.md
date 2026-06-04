@@ -197,7 +197,7 @@ Describe the business question here.
 
 ## Draft query
 
-```draft_query
+```sql draft_query
 select 1 as example_metric
 ```
 
