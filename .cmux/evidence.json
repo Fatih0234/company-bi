@@ -1,9 +1,15 @@
 {
   "type": "evidence",
+  "projectId": "company-bi",
   "port": 3000,
-  "agentCommand": "pi",
+  "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
   "devCommand": "npm run dev",
   "url": "http://localhost:3000",
   "workspaceDir": ".workspaces",
-  "analysisBasePort": 3100
+  "registryPath": ".cmux/registry.json",
+  "analysisBasePort": 3100,
+  "validateCommand": "npm run build",
+  "allowedAgentPaths": ["pages/**", "queries/**"],
+  "askBeforeAgentPaths": ["components/**", "sources/**", "package.json", "package-lock.json"],
+  "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**"]
 }

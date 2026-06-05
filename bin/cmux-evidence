@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -10,6 +11,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +20,7 @@ from typing import Any
 DEFAULT_PORT = 3000
 DEFAULT_ANALYSIS_BASE_PORT = 3100
 PORT_RANGE_SIZE = 100
+DEFAULT_REGISTRY_PATH = ".cmux/registry.json"
 
 
 def error(message: str) -> int:
@@ -50,6 +54,67 @@ def git_root(path: Path) -> Path | None:
     return Path(result.stdout.strip()).resolve()
 
 
+def expand_path(value: str, *, base: Path | None = None) -> Path:
+    expanded = os.path.expandvars(os.path.expanduser(value))
+    path = Path(expanded)
+    if not path.is_absolute() and base is not None:
+        path = base / path
+    return path.resolve()
+
+
+def project_id(root: Path, config: dict[str, Any]) -> str:
+    return str(config.get("projectId") or root.name)
+
+
+def registry_path(root: Path, config: dict[str, Any]) -> Path:
+    raw = str(config.get("registryPath") or DEFAULT_REGISTRY_PATH)
+    return expand_path(raw, base=root)
+
+
+def workspace_dir(root: Path, config: dict[str, Any]) -> Path:
+    raw = str(config.get("workspaceDir") or ".workspaces")
+    return expand_path(raw, base=root)
+
+
+def load_registry(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"version": 1, "projects": {}}
+    try:
+        registry = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in registry {path}: {exc}") from exc
+    if not isinstance(registry, dict):
+        raise ValueError(f"Invalid registry {path}: expected a JSON object")
+    registry.setdefault("version", 1)
+    registry.setdefault("projects", {})
+    return registry
+
+
+def save_registry(path: Path, registry: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def upsert_workspace_registry(
+    *,
+    registry_file: Path,
+    project_id_value: str,
+    project_root: Path,
+    workspace: dict[str, Any],
+) -> None:
+    registry = load_registry(registry_file)
+    projects = registry.setdefault("projects", {})
+    project = projects.setdefault(
+        project_id_value,
+        {"root": str(project_root), "workspaces": {}},
+    )
+    project["root"] = str(project_root)
+    project.setdefault("workspaces", {})[workspace["slug"]] = workspace
+    save_registry(registry_file, registry)
+
+
 def load_config(marker: Path) -> dict[str, Any]:
     try:
         config = json.loads(marker.read_text())
@@ -78,6 +143,13 @@ def load_project(target: Path) -> tuple[Path, dict[str, Any]]:
     return target, load_config(marker)
 
 
+def load_current_project() -> tuple[Path, dict[str, Any]]:
+    root = git_root(Path.cwd().resolve())
+    if root is None:
+        raise ValueError("Not inside a Git repository")
+    return load_project(root)
+
+
 def slugify(value: str) -> str:
     value = value.lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)
@@ -90,10 +162,10 @@ def branch_exists(root: Path, branch: str) -> bool:
     return result.returncode == 0
 
 
-def unique_slug(base_slug: str, root: Path, workspace_dir: Path) -> str:
+def unique_slug(base_slug: str, root: Path, workspaces_root: Path) -> str:
     slug = base_slug
     i = 2
-    while (workspace_dir / slug).exists() or branch_exists(root, f"analysis/{slug}"):
+    while (workspaces_root / slug).exists() or branch_exists(root, f"analysis/{slug}"):
         slug = f"{base_slug}-{i}"
         i += 1
     return slug
@@ -115,12 +187,12 @@ def port_is_free(port: int) -> bool:
     return True
 
 
-def used_workspace_ports(workspace_dir: Path) -> set[int]:
+def used_workspace_ports(workspaces_root: Path) -> set[int]:
     ports: set[int] = set()
-    if not workspace_dir.exists():
+    if not workspaces_root.exists():
         return ports
 
-    for path in workspace_dir.glob("*/.cmux/*.json"):
+    for path in workspaces_root.glob("*/.cmux/*.json"):
         try:
             data = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
@@ -135,8 +207,8 @@ def used_workspace_ports(workspace_dir: Path) -> set[int]:
     return ports
 
 
-def choose_port(base_port: int, workspace_dir: Path) -> int:
-    used_ports = used_workspace_ports(workspace_dir)
+def choose_port(base_port: int, workspaces_root: Path) -> int:
+    used_ports = used_workspace_ports(workspaces_root)
     for port in range(base_port, base_port + PORT_RANGE_SIZE):
         if port not in used_ports and port_is_free(port):
             return port
@@ -255,6 +327,33 @@ def open_workspace(target_arg: str | Path = ".", *, print_layout: bool = False) 
     return completed.returncode
 
 
+def resolve_registered_workspace(slug: str) -> Path:
+    root, config = load_current_project()
+    pid = project_id(root, config)
+    registry_file = registry_path(root, config)
+    registry = load_registry(registry_file)
+    workspace = registry.get("projects", {}).get(pid, {}).get("workspaces", {}).get(slug)
+    if not workspace:
+        raise ValueError(f"No analysis workspace found for {pid}: {slug}")
+    path = Path(str(workspace.get("path") or "")).expanduser().resolve()
+    if not path.exists() or not path.is_dir():
+        raise ValueError(f"Registered workspace path does not exist for {slug}: {path}")
+    return path
+
+
+def open_analysis(target_arg: str | Path = ".", *, print_layout: bool = False) -> int:
+    target_text = str(target_arg)
+    expanded = expand_path(target_text) if target_text not in {"", "."} else Path(".").resolve()
+    if expanded.exists() and expanded.is_dir():
+        return open_workspace(expanded, print_layout=print_layout)
+
+    try:
+        target = resolve_registered_workspace(target_text)
+    except ValueError as exc:
+        return error(str(exc))
+    return open_workspace(target, print_layout=print_layout)
+
+
 def write_analysis_page(path: Path, title: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -281,6 +380,119 @@ Ask Pi to replace this draft with a useful dashboard.
     )
 
 
+def string_list_config(config: dict[str, Any], key: str, default: list[str]) -> list[str]:
+    value = config.get(key) or default
+    if not isinstance(value, list):
+        return default
+    return [str(item) for item in value]
+
+
+def render_pi_context(
+    *,
+    project_id_value: str,
+    title: str,
+    slug: str,
+    branch: str,
+    worktree_path: Path,
+    page: str,
+    port: int,
+    url: str,
+    config: dict[str, Any],
+) -> str:
+    allowed = string_list_config(config, "allowedAgentPaths", ["pages/**", "queries/**"])
+    ask = string_list_config(
+        config,
+        "askBeforeAgentPaths",
+        ["components/**", "sources/**", "package.json", "package-lock.json"],
+    )
+    blocked = string_list_config(
+        config,
+        "blockedAgentPaths",
+        [".env*", "**/connection.yaml", ".github/**"],
+    )
+
+    def bullets(values: list[str]) -> str:
+        return "\n".join(f"- {value}" for value in values)
+
+    return f"""# Evidence Dashboard Workspace Context
+
+You are helping build an Evidence dashboard inside a CMUX workspace.
+
+## Active analysis
+
+- Project: {project_id_value}
+- Title: {title}
+- Slug: {slug}
+- Branch: {branch}
+- Worktree: {worktree_path}
+- Primary page: {page}
+- Preview URL: {url}
+- Dev server port: {port}
+
+## Main task
+
+Help the user create and refine the Evidence dashboard for this analysis.
+Start with the primary page unless the user explicitly asks for broader changes.
+
+## Safe edit policy
+
+Allowed by default:
+
+{bullets(allowed)}
+
+Ask before editing:
+
+{bullets(ask)}
+
+Do not edit:
+
+{bullets(blocked)}
+
+## CMUX workflow
+
+When making dashboard changes:
+
+1. Inspect the relevant Evidence files.
+2. Make a small, focused edit.
+3. Check the Evidence preview in the CMUX browser pane when possible.
+4. Fix visible Evidence errors before saying the task is complete.
+5. Summarize changed files and remaining questions.
+
+Use CMUX status/progress/notifications for long-running work when available.
+"""
+
+
+def write_pi_context(target: Path, metadata: dict[str, Any], config: dict[str, Any]) -> Path:
+    context_path = target / ".cmux" / "pi-context.md"
+    context_path.parent.mkdir(parents=True, exist_ok=True)
+    context_path.write_text(
+        render_pi_context(
+            project_id_value=str(metadata.get("projectId") or project_id(target, config)),
+            title=str(metadata.get("title") or target.name),
+            slug=str(metadata.get("slug") or target.name),
+            branch=str(metadata.get("branch") or ""),
+            worktree_path=Path(str(metadata.get("path") or target)).expanduser().resolve(),
+            page=str(metadata.get("page") or ""),
+            port=int(metadata.get("port") or config.get("port") or DEFAULT_PORT),
+            url=str(metadata.get("url") or config.get("url") or ""),
+            config=config,
+        )
+    )
+    return context_path
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def copy_project_skill(project_root: Path, worktree_path: Path, skill_name: str) -> None:
+    source = project_root / ".pi" / "skills" / skill_name
+    if not source.exists():
+        return
+    target = worktree_path / ".pi" / "skills" / skill_name
+    shutil.copytree(source, target, dirs_exist_ok=True)
+
+
 def new_analysis(title: str, *, print_layout: bool = False) -> int:
     title = title.strip()
     if not title:
@@ -299,19 +511,21 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
     if cwd != root:
         return error(f"Run `cmux-evidence new` from the main Evidence project root: {root}")
 
-    workspace_dir = root / str(config.get("workspaceDir") or ".workspaces")
-    workspace_dir.mkdir(parents=True, exist_ok=True)
+    pid = project_id(root, config)
+    workspaces_root = workspace_dir(root, config)
+    registry_file = registry_path(root, config)
+    workspaces_root.mkdir(parents=True, exist_ok=True)
 
     base_slug = slugify(title)
-    slug = unique_slug(base_slug, root, workspace_dir)
+    slug = unique_slug(base_slug, root, workspaces_root)
     branch = f"analysis/{slug}"
-    worktree_path = workspace_dir / slug
+    worktree_path = workspaces_root / slug
     page_rel = Path("pages") / "analysis" / f"{slug}.md"
     page_path = worktree_path / page_rel
 
     try:
         analysis_base_port = int(config.get("analysisBasePort", DEFAULT_ANALYSIS_BASE_PORT))
-        port = choose_port(analysis_base_port, workspace_dir)
+        port = choose_port(analysis_base_port, workspaces_root)
     except (TypeError, ValueError, RuntimeError) as exc:
         return error(str(exc))
 
@@ -326,58 +540,808 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
     except subprocess.CalledProcessError as exc:
         return error(f"Failed to create Git worktree for {branch}: exit {exc.returncode}")
 
+    created_at = now_iso()
     url = f"http://localhost:{port}/analysis/{slug}"
     worktree_config = dict(config)
     worktree_config.update(
         {
+            "projectId": pid,
             "port": port,
+            "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
             "devCommand": f"npm run dev -- --port {port}",
             "url": url,
+            "workspaceDir": str(workspaces_root),
+            "registryPath": str(registry_file),
         }
     )
+    workspace_metadata: dict[str, Any] = {
+        "kind": "evidence-analysis",
+        "projectId": pid,
+        "title": title,
+        "slug": slug,
+        "branch": branch,
+        "path": str(worktree_path),
+        "page": str(page_rel),
+        "port": port,
+        "url": url,
+        "status": "draft",
+        "createdFrom": base_branch,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+    }
 
     try:
         write_analysis_page(page_path, title)
+        copy_project_skill(root, worktree_path, "evidence-dashboard")
+        (worktree_path / ".cmux").mkdir(parents=True, exist_ok=True)
         (worktree_path / ".cmux" / "evidence.json").write_text(
             json.dumps(worktree_config, indent=2) + "\n"
         )
         (worktree_path / ".cmux" / "workspace.json").write_text(
-            json.dumps(
-                {
-                    "kind": "analysis",
-                    "title": title,
-                    "slug": slug,
-                    "branch": branch,
-                    "port": port,
-                    "page": str(page_rel),
-                    "status": "draft",
-                },
-                indent=2,
-            )
-            + "\n"
+            json.dumps(workspace_metadata, indent=2) + "\n"
         )
-    except OSError as exc:
-        return error(f"Created worktree, but failed to write analysis files: {exc}")
+        write_pi_context(worktree_path, workspace_metadata, worktree_config)
+        upsert_workspace_registry(
+            registry_file=registry_file,
+            project_id_value=pid,
+            project_root=root,
+            workspace=workspace_metadata,
+        )
+    except (OSError, ValueError) as exc:
+        return error(f"Created worktree, but failed to write analysis metadata: {exc}")
+
+    path_display = str(worktree_path)
+    try:
+        path_display = str(worktree_path.relative_to(root))
+    except ValueError:
+        pass
 
     print("Created analysis workspace")
     print()
     print(f"Title:  {title}")
     print(f"Slug:   {slug}")
     print(f"Branch: {branch}")
-    print(f"Path:   {worktree_path.relative_to(root)}")
+    print(f"Path:   {path_display}")
     print(f"Page:   {page_rel}")
     print(f"Port:   {port}")
+    print(f"URL:    {url}")
     print()
     print("Opening CMUX...")
 
     return open_workspace(worktree_path, print_layout=print_layout)
 
 
+def list_analyses() -> int:
+    try:
+        root, config = load_current_project()
+        pid = project_id(root, config)
+        registry = load_registry(registry_path(root, config))
+    except ValueError as exc:
+        return error(str(exc))
+
+    workspaces = registry.get("projects", {}).get(pid, {}).get("workspaces", {})
+    if not workspaces:
+        print(f"No analysis workspaces found for {pid}.")
+        return 0
+
+    rows = sorted(workspaces.values(), key=lambda row: str(row.get("slug", "")))
+    print(f"Analyses for {pid}")
+    print()
+    print(f"{'SLUG':<28} {'STATUS':<8} {'PORT':<5} BRANCH")
+    for row in rows:
+        print(
+            f"{str(row.get('slug', '')):<28} "
+            f"{str(row.get('status', '')):<8} "
+            f"{str(row.get('port', '')):<5} "
+            f"{row.get('branch', '')}"
+        )
+    return 0
+
+
+def load_workspace_metadata(target: Path) -> dict[str, Any] | None:
+    path = target / ".cmux" / "workspace.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid {path}: expected a JSON object")
+    return data
+
+
+def current_workspace_metadata() -> dict[str, Any]:
+    cwd = Path.cwd().resolve()
+    metadata = load_workspace_metadata(cwd)
+    if metadata is not None:
+        return metadata
+
+    root = git_root(cwd)
+    if root is None:
+        raise ValueError("Not inside a Git repository")
+    metadata = load_workspace_metadata(root)
+    if metadata is not None:
+        return metadata
+
+    config_path = root / ".cmux" / "evidence.json"
+    if not config_path.exists():
+        raise ValueError("No .cmux/workspace.json or .cmux/evidence.json found")
+    config = load_config(config_path)
+    branch = run_git(root, ["branch", "--show-current"], check=False).stdout.strip()
+    port = int(config.get("port", DEFAULT_PORT))
+    return {
+        "kind": "evidence-project",
+        "projectId": project_id(root, config),
+        "title": root.name,
+        "slug": root.name,
+        "branch": branch,
+        "path": str(root),
+        "page": "",
+        "port": port,
+        "url": str(config.get("url") or f"http://localhost:{port}"),
+        "status": "project",
+    }
+
+
+def print_metadata(metadata: dict[str, Any]) -> None:
+    fields = ["title", "slug", "branch", "page", "port", "url", "status"]
+    for field in fields:
+        value = metadata.get(field)
+        if value not in (None, ""):
+            print(f"{field.title()}: {value}")
+
+
+def current_command() -> int:
+    try:
+        print_metadata(current_workspace_metadata())
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+    return 0
+
+
+def resolve_preview_url() -> str:
+    metadata = current_workspace_metadata()
+    url = str(metadata.get("url") or "").strip()
+    if url:
+        return url
+    port = metadata.get("port")
+    if port not in (None, ""):
+        return f"http://localhost:{int(port)}"
+    target = current_workspace_root()
+    config = load_config(target / ".cmux" / "evidence.json")
+    url = str(config.get("url") or "").strip()
+    if url:
+        return url
+    port = config.get("port")
+    if port not in (None, ""):
+        return f"http://localhost:{int(port)}"
+    raise ValueError("Could not resolve Evidence preview URL from .cmux/workspace.json or .cmux/evidence.json")
+
+
+def preview_url_command() -> int:
+    try:
+        print(resolve_preview_url())
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+    return 0
+
+
+def cmux_workspace_id() -> str | None:
+    return os.environ.get("CMUX_WORKSPACE_ID")
+
+
+def cmux_binary() -> str | None:
+    return shutil.which("cmux")
+
+
+def run_cmux(args: list[str]) -> subprocess.CompletedProcess[str]:
+    cmux = cmux_binary()
+    if not cmux:
+        raise ValueError("Could not find cmux binary")
+    return subprocess.run(
+        [cmux, *args],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def current_workspace_root() -> Path:
+    cwd = Path.cwd().resolve()
+    if (cwd / ".cmux" / "evidence.json").exists():
+        return cwd
+    root = git_root(cwd)
+    if root is None:
+        raise ValueError("Not inside a Git repository")
+    if not (root / ".cmux" / "evidence.json").exists():
+        raise ValueError(f"Not an Evidence CMUX workspace: {root}")
+    return root
+
+
+def context_command(*, print_context: bool = False) -> int:
+    try:
+        target = current_workspace_root()
+        config = load_config(target / ".cmux" / "evidence.json")
+        metadata = load_workspace_metadata(target)
+        if metadata is None:
+            metadata = current_workspace_metadata()
+        content = render_pi_context(
+            project_id_value=str(metadata.get("projectId") or project_id(target, config)),
+            title=str(metadata.get("title") or target.name),
+            slug=str(metadata.get("slug") or target.name),
+            branch=str(metadata.get("branch") or ""),
+            worktree_path=Path(str(metadata.get("path") or target)).expanduser().resolve(),
+            page=str(metadata.get("page") or ""),
+            port=int(metadata.get("port") or config.get("port") or DEFAULT_PORT),
+            url=str(metadata.get("url") or config.get("url") or ""),
+            config=config,
+        )
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    if print_context:
+        print(content, end="")
+        return 0
+
+    context_path = target / ".cmux" / "pi-context.md"
+    try:
+        context_path.write_text(content)
+    except OSError as exc:
+        return error(f"Failed to write {context_path}: {exc}")
+    print(context_path)
+    return 0
+
+
+def url_port_reachable(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def status_command() -> int:
+    try:
+        metadata = current_workspace_metadata()
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    print_metadata(metadata)
+    print()
+    print("Git status:")
+    root = git_root(Path.cwd().resolve()) or Path.cwd().resolve()
+    result = run_git(root, ["status", "--short"], check=False)
+    print(result.stdout.rstrip() or "clean")
+    print()
+    url = str(metadata.get("url") or "")
+    if url:
+        reachable = url_port_reachable(url)
+        print(f"Evidence port: {'reachable' if reachable else 'not reachable'} ({url})")
+    else:
+        print("Evidence port: unknown")
+    return 0
+
+
+def find_browser_surfaces(value: Any) -> list[dict[str, Any]]:
+    browsers: list[dict[str, Any]] = []
+
+    def visit(item: Any) -> None:
+        if isinstance(item, dict):
+            item_type = str(item.get("type") or item.get("surfaceType") or item.get("kind") or "").lower()
+            if item_type == "browser":
+                browsers.append(item)
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return browsers
+
+
+def surface_ref(surface: dict[str, Any]) -> str | None:
+    for key in ("ref", "surface", "id", "surfaceId"):
+        value = surface.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def surface_url(surface: dict[str, Any]) -> str:
+    for key in ("url", "currentUrl", "href"):
+        value = surface.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def list_browser_surfaces() -> tuple[list[dict[str, Any]], str]:
+    workspace = cmux_workspace_id()
+    if not workspace:
+        raise ValueError("CMUX_WORKSPACE_ID is not set; run this inside a CMUX workspace")
+
+    panes_completed = run_cmux(["list-panes", "--workspace", workspace, "--json"])
+    panes_output = panes_completed.stdout.strip()
+    if panes_completed.returncode != 0:
+        raise ValueError((panes_completed.stderr or panes_output or "cmux list-panes failed").strip())
+
+    try:
+        panes_data = json.loads(panes_output)
+    except json.JSONDecodeError:
+        completed = run_cmux(["list-pane-surfaces", "--workspace", workspace, "--json"])
+        output = completed.stdout.strip()
+        if completed.returncode != 0:
+            raise ValueError((completed.stderr or output or "cmux list-pane-surfaces failed").strip())
+        return [], output
+
+    pane_refs = [pane.get("ref") for pane in panes_data.get("panes", []) if isinstance(pane, dict)]
+    all_browser_surfaces: list[dict[str, Any]] = []
+    all_outputs: list[dict[str, Any]] = []
+    for pane_ref in pane_refs:
+        if not isinstance(pane_ref, str) or not pane_ref:
+            continue
+        completed = run_cmux(
+            ["list-pane-surfaces", "--workspace", workspace, "--pane", pane_ref, "--json"]
+        )
+        output = completed.stdout.strip()
+        if completed.returncode != 0:
+            continue
+        try:
+            pane_data = json.loads(output)
+        except json.JSONDecodeError:
+            continue
+        all_outputs.append(pane_data)
+        for surface in find_browser_surfaces(pane_data):
+            ref = surface_ref(surface)
+            if ref and not surface_url(surface):
+                url_completed = run_cmux(["browser", ref, "get", "url"])
+                if url_completed.returncode == 0 and url_completed.stdout.strip():
+                    surface["url"] = url_completed.stdout.strip()
+            all_browser_surfaces.append(surface)
+
+    return all_browser_surfaces, json.dumps(all_outputs, indent=2)
+
+
+def browser_surfaces_command() -> int:
+    try:
+        browsers, raw = list_browser_surfaces()
+    except ValueError as exc:
+        return error(str(exc))
+    if browsers:
+        print(json.dumps(browsers, indent=2))
+    else:
+        print(raw or "No browser surfaces found.")
+    return 0
+
+
+def preview_open_command() -> int:
+    try:
+        url = resolve_preview_url()
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    workspace = cmux_workspace_id()
+    if not workspace:
+        print(url)
+        print("CMUX_WORKSPACE_ID is not set; open this URL in a browser pane from CMUX.", file=sys.stderr)
+        return 0
+
+    try:
+        completed = run_cmux(
+            [
+                "new-pane",
+                "--workspace",
+                workspace,
+                "--type",
+                "browser",
+                "--direction",
+                "right",
+                "--url",
+                url,
+                "--focus",
+                "false",
+            ]
+        )
+    except ValueError as exc:
+        return error(str(exc))
+
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed.returncode
+
+
+def choose_browser_surface() -> str:
+    browsers, _raw = list_browser_surfaces()
+    if not browsers:
+        raise ValueError("No browser surfaces found. Run `cmux-evidence preview-open` first.")
+
+    url = resolve_preview_url().rstrip("/")
+    matching = [surface for surface in browsers if surface_url(surface).rstrip("/") == url]
+    if len(matching) == 1:
+        ref = surface_ref(matching[0])
+        if ref:
+            return ref
+    if len(browsers) == 1:
+        ref = surface_ref(browsers[0])
+        if ref:
+            return ref
+
+    choices = []
+    for surface in browsers:
+        ref = surface_ref(surface) or "<unknown>"
+        choices.append(f"- {ref} {surface_url(surface)}".rstrip())
+    raise ValueError(
+        "Multiple browser surfaces found. Pass a surface ref explicitly:\n" + "\n".join(choices)
+    )
+
+
+def surface_arg_or_auto(args: list[str]) -> str:
+    if args:
+        return args[0]
+    return choose_browser_surface()
+
+
+def print_cmux_result(completed: subprocess.CompletedProcess[str]) -> int:
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed.returncode
+
+
+def preview_title_command(args: list[str]) -> int:
+    try:
+        surface = surface_arg_or_auto(args)
+        completed = run_cmux(["browser", surface, "eval", "document.title"])
+    except ValueError as exc:
+        return error(str(exc))
+    return print_cmux_result(completed)
+
+
+def preview_snapshot_command(args: list[str]) -> int:
+    try:
+        surface = surface_arg_or_auto(args)
+        completed = run_cmux(["browser", surface, "snapshot", "--interactive"])
+    except ValueError as exc:
+        return error(str(exc))
+    return print_cmux_result(completed)
+
+
+def preview_screenshot_command(args: list[str]) -> int:
+    try:
+        surface = surface_arg_or_auto(args)
+        if len(args) > 1:
+            path = Path(args[1]).expanduser().resolve()
+        else:
+            slug = str(current_workspace_metadata().get("slug") or "preview")
+            path = Path(f"/tmp/cmux-evidence-preview-{slug}.png")
+        completed = run_cmux(["browser", surface, "screenshot", "--out", str(path)])
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+    if completed.returncode == 0:
+        print(path)
+    return print_cmux_result(completed)
+
+
+def cmux_best_effort(args: list[str]) -> None:
+    if not cmux_workspace_id() or not cmux_binary():
+        return
+    subprocess.run([cmux_binary() or "cmux", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
+def package_has_script(target: Path, script_name: str) -> bool:
+    package_json = target / "package.json"
+    if not package_json.exists():
+        return False
+    try:
+        package = json.loads(package_json.read_text())
+    except json.JSONDecodeError:
+        return False
+    scripts = package.get("scripts")
+    return isinstance(scripts, dict) and script_name in scripts
+
+
+def validation_command(target: Path, config: dict[str, Any]) -> str | None:
+    configured = str(config.get("validateCommand") or "").strip()
+    if configured:
+        return configured
+    if package_has_script(target, "build"):
+        return "npm run build"
+    if package_has_script(target, "sources"):
+        return "npm run sources"
+    return None
+
+
+def workspace_target_config_metadata() -> tuple[Path, dict[str, Any], dict[str, Any]]:
+    target = current_workspace_root()
+    config = load_config(target / ".cmux" / "evidence.json")
+    metadata = load_workspace_metadata(target) or current_workspace_metadata()
+    return target, config, metadata
+
+
+def validate_command() -> int:
+    try:
+        target, config, metadata = workspace_target_config_metadata()
+        command = validation_command(target, config)
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    print_metadata(metadata)
+    print()
+    if not command:
+        return error("No validation command configured. Add validateCommand to .cmux/evidence.json or define npm script 'build'.")
+
+    print(f"Running validation: {command}")
+    print()
+    sys.stdout.flush()
+    workspace = cmux_workspace_id()
+    if workspace:
+        cmux_best_effort(["set-status", "validation", "running", "--workspace", workspace, "--color", "#ff9500"])
+        cmux_best_effort(["set-progress", "0.2", "--label", "Validating", "--workspace", workspace])
+
+    completed = subprocess.run(command, cwd=target, shell=True)
+
+    if workspace:
+        if completed.returncode == 0:
+            cmux_best_effort(["set-status", "validation", "passed", "--workspace", workspace, "--color", "#34c759"])
+            cmux_best_effort(["clear-progress", "--workspace", workspace])
+        else:
+            cmux_best_effort(["set-status", "validation", "failed", "--workspace", workspace, "--color", "#ff3b30"])
+            cmux_best_effort(["notify", "--title", "Evidence Validation", "--body", "Validation failed", "--workspace", workspace])
+
+    return completed.returncode
+
+
+def diff_command(*, stat_only: bool = False) -> int:
+    try:
+        target, _config, metadata = workspace_target_config_metadata()
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    print_metadata(metadata)
+    print()
+    commands = [["status", "--short"], ["diff", "--stat"]]
+    if not stat_only:
+        commands.append(["diff"])
+
+    exit_code = 0
+    for git_args in commands:
+        print(f"$ git {' '.join(git_args)}")
+        result = run_git(target, git_args, check=False)
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        if not result.stdout and git_args == ["status", "--short"]:
+            print("clean")
+        if result.returncode != 0:
+            exit_code = result.returncode
+        print()
+    return exit_code
+
+
+def ensure_analysis_workspace(metadata: dict[str, Any]) -> None:
+    if metadata.get("kind") != "evidence-analysis" or not metadata.get("slug"):
+        raise ValueError("Publish must be run inside a generated Evidence analysis worktree")
+
+
+def git_changed_paths(target: Path) -> list[str]:
+    result = run_git(target, ["status", "--porcelain", "-z"], check=False)
+    if result.returncode != 0:
+        raise ValueError((result.stderr or "git status failed").strip())
+    entries = result.stdout.split("\0")
+    paths: list[str] = []
+    for entry in entries:
+        if not entry:
+            continue
+        path_text = entry[3:] if len(entry) > 3 else entry
+        if " -> " in path_text:
+            path_text = path_text.split(" -> ", 1)[1]
+        paths.append(path_text)
+    return paths
+
+
+def path_matches_any(path: str, patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
+
+
+def ensure_no_blocked_changes(target: Path, config: dict[str, Any]) -> None:
+    blocked = string_list_config(config, "blockedAgentPaths", [".env*", "**/connection.yaml", ".github/**"])
+    blocked_changes = [path for path in git_changed_paths(target) if path_matches_any(path, blocked)]
+    if blocked_changes:
+        raise ValueError("Refusing to publish blocked paths:\n" + "\n".join(f"- {path}" for path in blocked_changes))
+
+
+def write_pr_body(target: Path, metadata: dict[str, Any]) -> Path:
+    path = target / ".cmux" / "pr-body.md"
+    title = str(metadata.get("title") or "Evidence analysis")
+    path.write_text(
+        f"""# Evidence analysis
+
+## Summary
+
+Adds the {title} analysis dashboard.
+
+## Workspace metadata
+
+- Branch: {metadata.get('branch', '')}
+- Page: {metadata.get('page', '')}
+- Local preview: {metadata.get('url', '')}
+
+## Validation
+
+- [x] `cmux-evidence validate` passed locally
+- [ ] Dashboard preview reviewed
+- [x] Diff reviewed
+
+## Notes
+
+Generated from a CMUX Evidence analysis workspace.
+"""
+    )
+    return path
+
+
+def update_workspace_status(target: Path, config: dict[str, Any], metadata: dict[str, Any], status: str) -> None:
+    metadata["status"] = status
+    metadata["updatedAt"] = now_iso()
+    (target / ".cmux" / "workspace.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    registry_file = registry_path(target, config)
+    pid = str(metadata.get("projectId") or project_id(target, config))
+    project_root = target
+    try:
+        registry = load_registry(registry_file)
+        existing_root = registry.get("projects", {}).get(pid, {}).get("root")
+        if existing_root:
+            project_root = Path(str(existing_root)).expanduser().resolve()
+    except ValueError:
+        project_root = target
+    upsert_workspace_registry(
+        registry_file=registry_file,
+        project_id_value=pid,
+        project_root=project_root,
+        workspace=metadata,
+    )
+
+
+def confirm_publish(metadata: dict[str, Any]) -> bool:
+    print("Publish this analysis branch?")
+    print()
+    print(f"Title:  {metadata.get('title', '')}")
+    print(f"Branch: {metadata.get('branch', '')}")
+    print(f"Page:   {metadata.get('page', '')}")
+    print()
+    print("Type 'publish' to continue: ", end="", flush=True)
+    return sys.stdin.readline().strip() == "publish"
+
+
+def publish_command() -> int:
+    try:
+        target, config, metadata = workspace_target_config_metadata()
+        ensure_analysis_workspace(metadata)
+        ensure_no_blocked_changes(target, config)
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    workspace = cmux_workspace_id()
+    if workspace:
+        cmux_best_effort(["set-progress", "0.2", "--label", "Validating", "--workspace", workspace])
+
+    validation_result = validate_command()
+    if validation_result != 0:
+        return validation_result
+
+    if not git_changed_paths(target):
+        print("No changes to publish.")
+        return 0
+
+    diff_command(stat_only=True)
+    if not confirm_publish(metadata):
+        print("Publish cancelled.")
+        return 1
+
+    title = str(metadata.get("title") or metadata.get("slug") or "Evidence analysis")
+    branch = str(metadata.get("branch") or run_git(target, ["branch", "--show-current"], check=False).stdout.strip())
+    message = f"Add analysis: {title}"
+
+    if workspace:
+        cmux_best_effort(["set-progress", "0.6", "--label", "Committing", "--workspace", workspace])
+
+    run_git(target, ["add", "-A"], check=False)
+    commit = run_git(target, ["commit", "-m", message], check=False)
+    if commit.stdout:
+        print(commit.stdout, end="")
+    if commit.stderr:
+        print(commit.stderr, end="", file=sys.stderr)
+    if commit.returncode != 0:
+        return commit.returncode
+
+    try:
+        update_workspace_status(target, config, metadata, "committed")
+    except (OSError, ValueError) as exc:
+        print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+
+    push = run_git(target, ["push", "-u", "origin", branch], check=False)
+    if push.stdout:
+        print(push.stdout, end="")
+    if push.stderr:
+        print(push.stderr, end="", file=sys.stderr)
+    if push.returncode != 0:
+        print()
+        print("Push failed. Run manually when ready:")
+        print(f"git push -u origin {branch}")
+        return push.returncode
+
+    try:
+        update_workspace_status(target, config, metadata, "published")
+    except (OSError, ValueError) as exc:
+        print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+
+    gh = shutil.which("gh")
+    if not gh:
+        print()
+        print("gh CLI not found. Open a PR manually from this branch:")
+        print(f"git push -u origin {branch}")
+        print("# then open a PR from the branch")
+        return 0
+
+    if workspace:
+        cmux_best_effort(["set-progress", "0.9", "--label", "Opening PR", "--workspace", workspace])
+
+    body_path = write_pr_body(target, metadata)
+    pr = subprocess.run(
+        [gh, "pr", "create", "--title", message, "--body-file", str(body_path)],
+        cwd=target,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if pr.stdout:
+        print(pr.stdout, end="")
+    if pr.stderr:
+        print(pr.stderr, end="", file=sys.stderr)
+    if pr.returncode != 0:
+        print()
+        print("PR creation failed. Open a PR manually from this branch.")
+        return 0
+
+    try:
+        update_workspace_status(target, config, metadata, "pr-opened")
+    except (OSError, ValueError) as exc:
+        print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+    if workspace:
+        cmux_best_effort(["notify", "--title", "Evidence Publish", "--body", "PR is ready", "--workspace", workspace])
+        cmux_best_effort(["clear-progress", "--workspace", workspace])
+    return 0
+
+
 def usage() -> str:
     return """Usage:
   cmux-evidence [--print-layout] [path]
-  cmux-evidence open [--print-layout] [path]
+  cmux-evidence open [--print-layout] [path-or-slug]
   cmux-evidence new [--print-layout] "analysis name"
+  cmux-evidence list
+  cmux-evidence current
+  cmux-evidence status
+  cmux-evidence context [--print]
+  cmux-evidence preview-url
+  cmux-evidence preview-open
+  cmux-evidence browser-surfaces
+  cmux-evidence preview-title [surface-ref]
+  cmux-evidence preview-snapshot [surface-ref]
+  cmux-evidence preview-screenshot [surface-ref] [path]
+  cmux-evidence validate
+  cmux-evidence diff
+  cmux-evidence publish
 """.rstrip()
 
 
@@ -400,7 +1364,46 @@ def main(argv: list[str] | None = None) -> int:
         return new_analysis(" ".join(args[1:]), print_layout=print_layout)
 
     if command == "open":
-        return open_workspace(args[1] if len(args) > 1 else ".", print_layout=print_layout)
+        return open_analysis(args[1] if len(args) > 1 else ".", print_layout=print_layout)
+
+    if command == "list":
+        return list_analyses()
+
+    if command == "current":
+        return current_command()
+
+    if command == "status":
+        return status_command()
+
+    if command == "context":
+        return context_command(print_context="--print" in args[1:])
+
+    if command == "preview-url":
+        return preview_url_command()
+
+    if command == "preview-open":
+        return preview_open_command()
+
+    if command == "browser-surfaces":
+        return browser_surfaces_command()
+
+    if command == "preview-title":
+        return preview_title_command(args[1:])
+
+    if command == "preview-snapshot":
+        return preview_snapshot_command(args[1:])
+
+    if command == "preview-screenshot":
+        return preview_screenshot_command(args[1:])
+
+    if command == "validate":
+        return validate_command()
+
+    if command == "diff":
+        return diff_command(stat_only="--stat" in args[1:])
+
+    if command == "publish":
+        return publish_command()
 
     return open_workspace(command, print_layout=print_layout)
 

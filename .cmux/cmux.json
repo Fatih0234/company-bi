@@ -1,0 +1,60 @@
+{
+  "actions": {
+    "evidence-new-analysis": {
+      "type": "command",
+      "title": "Evidence: New Analysis",
+      "subtitle": "Create a Git worktree, Evidence page, Pi agent, preview, and logs",
+      "command": "./bin/cmux-evidence new",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-list-analyses": {
+      "type": "command",
+      "title": "Evidence: List Analyses",
+      "subtitle": "Show known analysis workspaces for this project",
+      "command": "./bin/cmux-evidence list",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-current-analysis": {
+      "type": "command",
+      "title": "Evidence: Current Analysis",
+      "subtitle": "Show metadata for the current analysis workspace",
+      "command": "./bin/cmux-evidence current",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-status": {
+      "type": "command",
+      "title": "Evidence: Status",
+      "subtitle": "Show Git, port, and workspace status",
+      "command": "./bin/cmux-evidence status",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-validate": {
+      "type": "command",
+      "title": "Evidence: Validate Dashboard",
+      "subtitle": "Run Evidence validation/build checks for this workspace",
+      "command": "./bin/cmux-evidence validate",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-diff": {
+      "type": "command",
+      "title": "Evidence: Show Diff",
+      "subtitle": "Show current analysis Git diff",
+      "command": "./bin/cmux-evidence diff",
+      "target": "currentTerminal",
+      "palette": true
+    },
+    "evidence-publish": {
+      "type": "command",
+      "title": "Evidence: Publish Draft",
+      "subtitle": "Validate, commit, push, and prepare a PR",
+      "command": "./bin/cmux-evidence publish",
+      "target": "currentTerminal",
+      "palette": true
+    }
+  }
+}

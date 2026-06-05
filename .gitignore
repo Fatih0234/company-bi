@@ -24,13 +24,17 @@ data/tlc/reference/
 .env.local
 connection.options.yaml
 
-# Local analysis worktrees
+# Local analysis worktrees and CMUX-generated state
 .workspaces/
+.cmux/registry.json
 .cmux/workspace.json
+.cmux/pr-body.md
 
 # Local agent/index state
 .agent/
 .pi/todos/
+.pi/skills/cmux/
+.pi/skills/cmux-*/
 
 # Python cache
 __pycache__/
