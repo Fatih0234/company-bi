@@ -2,9 +2,11 @@
 
 References: `10_CMUX_EVIDENCE_WORKSPACE_OS_SPEC.md` sections **Pi should be workspace-aware by default**, **Configuration contract**, and **Metadata contract**.
 
+> Superseded/refined by `20_DYNAMIC_EVIDENCE_CONTEXT_EXTENSION.md`: workspace context is now injected passively before each user turn by `.pi/extensions/evidence-context.ts`. `.cmux/pi-context.md` remains a legacy/fallback human-readable snapshot, not the primary launch mechanism.
+
 ## Goal
 
-Every generated analysis workspace should start Pi with a workspace-specific system prompt append file.
+Every generated analysis workspace should provide Pi with workspace-specific context. The current preferred mechanism is every-turn extension injection from durable metadata and safe source files.
 
 The file should tell Pi:
 
@@ -90,7 +92,7 @@ Add path policy fields:
 
 ```json
 {
-  "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
+  "agentCommand": "./bin/lumen-pi",
   "allowedAgentPaths": ["pages/**", "queries/**"],
   "askBeforeAgentPaths": ["components/**", "sources/**", "package.json", "package-lock.json"],
   "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**"]
@@ -179,17 +181,17 @@ When `new_analysis` writes metadata, also write:
 )
 ```
 
-## Launch Pi with the context file
+## Launch Pi
 
-The generated worktree `.cmux/evidence.json` should set:
+The generated worktree `.cmux/evidence.json` now sets:
 
 ```json
 {
-  "agentCommand": "pi --append-system-prompt .cmux/pi-context.md"
+  "agentCommand": "./bin/lumen-pi"
 }
 ```
 
-This works because the Pi pane starts with `cwd` set to the worktree.
+The wrapper starts Pi with global extension/skill/prompt/theme discovery disabled, then loads the app-local package from `.pi/package.json`. This keeps dashboard sessions specialized for LUMEN/Evidence while still allowing normal provider/model/auth settings to come from Pi configuration.
 
 ## Add `cmux-evidence context`
 
@@ -226,9 +228,9 @@ Create:
 Suggested content:
 
 ```md
-Use the current Evidence dashboard workspace context.
+Use the current dynamic Evidence dashboard workspace context.
 
-Please help me improve the active analysis page. First inspect `.cmux/workspace.json`, `.cmux/pi-context.md`, and the primary Evidence page. Then propose a short plan before editing.
+Please help me improve the active analysis page. First inspect `.cmux/workspace.json` and the primary Evidence page when needed. Use `/evidence-context` if the generated workspace/data context needs debugging. Then propose a short plan before editing.
 ```
 
 This gives the user a convenient `/evidence-dashboard` prompt inside Pi.
@@ -237,8 +239,8 @@ This gives the user a convenient `/evidence-dashboard` prompt inside Pi.
 
 - New analysis worktrees contain `.cmux/pi-context.md`.
 - The context file includes title, slug, branch, page, port, and URL.
-- The Pi agent command includes `--append-system-prompt .cmux/pi-context.md`.
-- Existing `cmux-evidence open` opens Pi with the context-aware command.
+- The Pi agent command is `./bin/lumen-pi`.
+- Existing `cmux-evidence open` opens Pi from the worktree so project-local extensions can inject context.
 - `cmux-evidence context` regenerates context.
 - The prompt does not include secrets.
 
@@ -248,6 +250,7 @@ This gives the user a convenient `/evidence-dashboard` prompt inside Pi.
 ./bin/cmux-evidence new --print-layout "dynamic context smoke test"
 cat <workspace-path>/.cmux/pi-context.md
 cat <workspace-path>/.cmux/evidence.json | jq .agentCommand
+# Expected: "./bin/lumen-pi"
 ```
 
 Manual CMUX test:
