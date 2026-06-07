@@ -9,6 +9,11 @@
   "registryPath": ".cmux/registry.json",
   "analysisBasePort": 3100,
   "validateCommand": "npm run build",
+  "onboardingAi": {
+    "provider": "opencode",
+    "model": "mimo-v2.5-free",
+    "thinking": "medium"
+  },
   "allowedAgentPaths": ["pages/**", "queries/**"],
   "askBeforeAgentPaths": ["components/**", "sources/**", "package.json", "package-lock.json"],
   "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**"]

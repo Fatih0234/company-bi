@@ -21,6 +21,56 @@ DEFAULT_PORT = 3000
 DEFAULT_ANALYSIS_BASE_PORT = 3100
 PORT_RANGE_SIZE = 100
 DEFAULT_REGISTRY_PATH = ".cmux/registry.json"
+THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"]
+
+
+_STYLE_CODES = {
+    "reset": "\033[0m",
+    "bold": "\033[1m",
+    "dim": "\033[2m",
+    "cyan": "\033[36m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "red": "\033[31m",
+    "muted": "\033[90m",
+}
+
+
+def use_color() -> bool:
+    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None and os.environ.get("TERM") != "dumb"
+
+
+def style(text: str, *, color: str | None = None, bold: bool = False, dim: bool = False) -> str:
+    if not use_color():
+        return text
+    prefixes: list[str] = []
+    if bold:
+        prefixes.append(_STYLE_CODES["bold"])
+    if dim:
+        prefixes.append(_STYLE_CODES["dim"])
+    if color:
+        prefixes.append(_STYLE_CODES.get(color, ""))
+    return "".join(prefixes) + text + _STYLE_CODES["reset"] if prefixes else text
+
+
+def heading(text: str) -> str:
+    return style(text, color="cyan", bold=True)
+
+
+def muted(text: str) -> str:
+    return style(text, color="muted", dim=True)
+
+
+def success_text(text: str) -> str:
+    return style(text, color="green")
+
+
+def warning_text(text: str) -> str:
+    return style(text, color="yellow")
+
+
+def error_text(text: str) -> str:
+    return style(text, color="red")
 
 
 def error(message: str) -> int:
@@ -354,18 +404,109 @@ def open_analysis(target_arg: str | Path = ".", *, print_layout: bool = False) -
     return open_workspace(target, print_layout=print_layout)
 
 
-def write_analysis_page(path: Path, title: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"""# {title}
+def render_analysis_page(title: str, metadata: dict[str, Any] | None = None) -> str:
+    intention = metadata.get("intention") if isinstance(metadata, dict) else None
+    intention = intention if isinstance(intention, dict) else {}
 
-This is an agent-created Evidence analysis workspace.
+    def list_value(key: str) -> list[str]:
+        value = intention.get(key)
+        if not isinstance(value, list):
+            return []
+        rendered: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                question = str(item.get("question") or "").strip()
+                answer = str(item.get("answer") or "").strip()
+                if question and answer:
+                    rendered.append(f"{question} — {answer}")
+                elif question or answer:
+                    rendered.append(question or answer)
+            else:
+                text = str(item).strip()
+                if text:
+                    rendered.append(text)
+        return rendered
 
-## Question
+    def bullets(values: list[str], fallback: str = "Not specified yet.") -> str:
+        return "\n".join(f"- {value}" for value in values) if values else fallback
 
-Describe the business question here.
+    def checklist(values: list[str], fallback_items: list[str]) -> str:
+        items = values or fallback_items
+        return "\n".join(f"- [ ] {value}" for value in items)
 
-## Draft query
+    goal = str(intention.get("goal") or "").strip() or "Describe the business question this dashboard should answer."
+    questions = list_value("questions")
+    stakeholders = list_value("stakeholders")
+    success_criteria = list_value("successCriteria")
+    dashboard_options = list_value("dashboardOptions")
+    assumptions = list_value("assumptions")
+    clarifications = list_value("clarifications")
+    open_questions = list_value("openQuestions")
+
+    dashboard_checklist = checklist(
+        dashboard_options,
+        [
+            "Create KPI cards for the core operating metrics.",
+            "Add at least one trend chart for time-based analysis.",
+            "Add a ranking table or chart for important dimensions.",
+            "Add useful filters if the data supports them.",
+            "Validate the rendered dashboard in the CMUX browser preview.",
+        ],
+    )
+
+    title_yaml = json.dumps(title)
+
+    return f"""---
+title: {title_yaml}
+---
+
+# {title}
+
+This is an agent-created Evidence analysis workspace. The brief below comes from the onboarding conversation and should stay visible so the user and Pi can stay aligned while the dashboard evolves.
+
+## Workspace Brief
+
+### Goal
+
+{goal}
+
+### Questions this dashboard should answer
+
+{bullets(questions)}
+
+### Stakeholders / audience
+
+{bullets(stakeholders)}
+
+### Success criteria
+
+{bullets(success_criteria)}
+
+### Proposed dashboard direction
+
+{bullets(dashboard_options)}
+
+### Assumptions
+
+{bullets(assumptions)}
+
+### Clarifications captured during onboarding
+
+{bullets(clarifications, "No clarifications captured yet.")}
+
+### Open questions
+
+{bullets(open_questions, "No open questions captured yet.")}
+
+## Build Checklist
+
+Pi should update this checklist as it turns the brief into an Evidence dashboard.
+
+{dashboard_checklist}
+
+## Dashboard Draft
+
+Replace this starter query and table with dashboard elements that answer the brief above.
 
 ```sql draft_query
 select 1 as example_metric
@@ -373,11 +514,17 @@ select 1 as example_metric
 
 <DataTable data={{draft_query}} />
 
-## Notes
+## Notes for Pi
 
-Ask Pi to replace this draft with a useful dashboard.
+- Keep the Workspace Brief aligned with `.cmux/workspace.json` when the user's goal changes.
+- Prefer Evidence-native Markdown, SQL, KPI cards, charts, filters, and tables.
+- Use the CMUX browser preview to verify visible dashboard quality after meaningful edits.
 """
-    )
+
+
+def write_analysis_page(path: Path, title: str, metadata: dict[str, Any] | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_analysis_page(title, metadata))
 
 
 def string_list_config(config: dict[str, Any], key: str, default: list[str]) -> list[str]:
@@ -385,6 +532,88 @@ def string_list_config(config: dict[str, Any], key: str, default: list[str]) -> 
     if not isinstance(value, list):
         return default
     return [str(item) for item in value]
+
+
+def render_intention_context(metadata: dict[str, Any]) -> str:
+    intention = metadata.get("intention")
+    if not isinstance(intention, dict):
+        return ""
+
+    scalar_goal = str(intention.get("goal") or "").strip()
+    has_any_value = bool(scalar_goal)
+    for key in ["questions", "dashboardOptions", "stakeholders", "successCriteria", "assumptions", "clarifications", "openQuestions"]:
+        value = intention.get(key)
+        if isinstance(value, list) and any(str(item).strip() for item in value):
+            has_any_value = True
+            break
+    if not has_any_value:
+        return ""
+
+    def list_value(key: str) -> list[str]:
+        value = intention.get(key)
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    def bullets(values: list[str]) -> str:
+        return "\n".join(f"- {value}" for value in values) if values else "- Not specified"
+
+    goal = scalar_goal or "Not specified"
+    sections = [
+        "## Analysis intention",
+        "",
+        "This workspace has an explicit analytical brief. Preserve and use it as the default direction for dashboard decisions unless the user changes it.",
+        "",
+        "### Goal",
+        "",
+        goal,
+        "",
+        "### Questions to answer",
+        "",
+        bullets(list_value("questions")),
+        "",
+        "### Stakeholders / audience",
+        "",
+        bullets(list_value("stakeholders")),
+        "",
+        "### Success criteria",
+        "",
+        bullets(list_value("successCriteria")),
+    ]
+
+    dashboard_options = list_value("dashboardOptions")
+    if dashboard_options:
+        sections.extend(["", "### Evidence dashboard direction", "", bullets(dashboard_options)])
+
+    assumptions = list_value("assumptions")
+    if assumptions:
+        sections.extend(["", "### Assumptions", "", bullets(assumptions)])
+
+    clarifications = intention.get("clarifications")
+    if isinstance(clarifications, list) and clarifications:
+        rendered = []
+        for item in clarifications:
+            if isinstance(item, dict):
+                question = str(item.get("question") or "").strip()
+                answer = str(item.get("answer") or "").strip()
+                if question or answer:
+                    rendered.append(f"- {question}: {answer}" if question and answer else f"- {question or answer}")
+            elif str(item).strip():
+                rendered.append(f"- {str(item).strip()}")
+        if rendered:
+            sections.extend(["", "### Clarifications", "", "\n".join(rendered)])
+
+    open_questions = list_value("openQuestions")
+    if open_questions:
+        sections.extend(["", "### Open questions", "", bullets(open_questions)])
+
+    sections.extend(
+        [
+            "",
+            "When proposing or editing the dashboard, map each major element back to the goal, questions, stakeholders, or success criteria above.",
+        ]
+    )
+    return "\n".join(sections)
 
 
 def render_pi_context(
@@ -398,6 +627,7 @@ def render_pi_context(
     port: int,
     url: str,
     config: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     allowed = string_list_config(config, "allowedAgentPaths", ["pages/**", "queries/**"])
     ask = string_list_config(
@@ -414,6 +644,9 @@ def render_pi_context(
     def bullets(values: list[str]) -> str:
         return "\n".join(f"- {value}" for value in values)
 
+    intention_context = render_intention_context(metadata or {})
+    intention_block = f"\n{intention_context}\n" if intention_context else ""
+
     return f"""# Evidence Dashboard Workspace Context
 
 You are helping build an Evidence dashboard inside a CMUX workspace.
@@ -428,7 +661,7 @@ You are helping build an Evidence dashboard inside a CMUX workspace.
 - Primary page: {page}
 - Preview URL: {url}
 - Dev server port: {port}
-
+{intention_block}
 ## Main task
 
 Help the user create and refine the Evidence dashboard for this analysis.
@@ -476,6 +709,7 @@ def write_pi_context(target: Path, metadata: dict[str, Any], config: dict[str, A
             port=int(metadata.get("port") or config.get("port") or DEFAULT_PORT),
             url=str(metadata.get("url") or config.get("url") or ""),
             config=config,
+            metadata=metadata,
         )
     )
     return context_path
@@ -485,18 +719,411 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def copy_project_skill(project_root: Path, worktree_path: Path, skill_name: str) -> None:
-    source = project_root / ".pi" / "skills" / skill_name
+def copy_project_subdir(project_root: Path, worktree_path: Path, relative_path: str) -> None:
+    source = project_root / relative_path
     if not source.exists():
         return
-    target = worktree_path / ".pi" / "skills" / skill_name
-    shutil.copytree(source, target, dirs_exist_ok=True)
+    target = worktree_path / relative_path
+    if source.is_dir():
+        shutil.copytree(source, target, dirs_exist_ok=True)
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
 
 
-def new_analysis(title: str, *, print_layout: bool = False) -> int:
+def copy_project_skill(project_root: Path, worktree_path: Path, skill_name: str) -> None:
+    copy_project_subdir(project_root, worktree_path, str(Path(".pi") / "skills" / skill_name))
+
+
+def copy_project_extension(project_root: Path, worktree_path: Path, extension_name: str) -> None:
+    copy_project_subdir(project_root, worktree_path, str(Path(".pi") / "extensions" / extension_name))
+
+
+def prompt_line(label: str, *, default: str = "") -> str:
+    suffix = muted(f" [{default}]") if default else ""
+    value = input(f"{style(label, bold=True)}{suffix}: ").strip()
+    return value or default
+
+
+def prompt_multiline(label: str) -> list[str]:
+    print(style(label, bold=True))
+    print(muted("Enter one per line. Empty line to finish."))
+    values: list[str] = []
+    while True:
+        value = input("> ").strip()
+        if not value:
+            break
+        values.append(value)
+    return values
+
+
+def prompt_yes_no(label: str, *, default: bool = True) -> bool:
+    hint = "Y/n" if default else "y/N"
+    while True:
+        value = input(f"{style(label, bold=True)} {muted(f'[{hint}]')} ").strip().lower()
+        if not value:
+            return default
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
+        print("Please answer yes or no.")
+
+
+def dedupe_append(existing: list[str], additions: list[str]) -> list[str]:
+    seen = {item.strip().lower() for item in existing}
+    result = list(existing)
+    for item in additions:
+        cleaned = str(item).strip()
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            result.append(cleaned)
+            seen.add(key)
+    return result
+
+
+def source_catalog_for_prompt(root: Path, *, max_chars: int = 6000) -> str:
+    sources_dir = root / "sources"
+    if not sources_dir.exists():
+        return "No Evidence sources directory found."
+
+    parts: list[str] = []
+    for source_dir in sorted(path for path in sources_dir.iterdir() if path.is_dir()):
+        source_name = source_dir.name
+        query_files = sorted(path for path in source_dir.glob("*.sql"))
+        parts.append(f"Source: {source_name}")
+        if not query_files:
+            parts.append("- No source query files found.")
+            continue
+        for query_file in query_files:
+            table_name = query_file.stem
+            try:
+                sql = query_file.read_text()
+            except OSError:
+                sql = ""
+            sql = re.sub(r"\s+", " ", sql).strip()
+            if len(sql) > 900:
+                sql = sql[:900].rstrip() + "..."
+            parts.append(f"- {source_name}.{table_name}: defined by sources/{source_name}/{query_file.name}")
+            if sql:
+                parts.append(f"  SQL summary text: {sql}")
+    text = "\n".join(parts)
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + "\n..."
+    return text
+
+
+def load_json_object(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def pi_agent_dir() -> Path:
+    raw = os.environ.get("PI_CODING_AGENT_DIR")
+    if raw:
+        return Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
+    return (Path.home() / ".pi" / "agent").resolve()
+
+
+def load_pi_default_ai_model(root: Path, config: dict[str, Any]) -> dict[str, str]:
+    configured = config.get("onboardingAi")
+    if not isinstance(configured, dict):
+        configured = {}
+    defaults = {
+        "provider": str(configured.get("provider") or "opencode"),
+        "model": str(configured.get("model") or "mimo-v2.5-free"),
+        "thinking": str(configured.get("thinking") or configured.get("thinkingLevel") or "medium"),
+        "source": "project onboarding default",
+    }
+
+    merged: dict[str, Any] = {}
+    for path in [pi_agent_dir() / "settings.json", root / ".pi" / "settings.json"]:
+        settings = load_json_object(path)
+        for key in ["defaultProvider", "defaultModel", "defaultThinkingLevel"]:
+            if settings.get(key):
+                merged[key] = settings[key]
+
+    provider = str(merged.get("defaultProvider") or "").strip()
+    model = str(merged.get("defaultModel") or "").strip()
+    thinking = str(merged.get("defaultThinkingLevel") or "").strip()
+    if provider and model:
+        defaults["provider"] = provider
+        defaults["model"] = model
+        defaults["source"] = "Pi default model"
+    if thinking in THINKING_LEVELS:
+        defaults["thinking"] = thinking
+    return defaults
+
+
+def select_onboarding_ai(root: Path, config: dict[str, Any]) -> dict[str, str]:
+    defaults = load_pi_default_ai_model(root, config)
+    thinking = defaults["thinking"] if defaults["thinking"] in THINKING_LEVELS else "medium"
+    return {
+        "provider": defaults["provider"],
+        "model": defaults["model"],
+        "thinking": thinking,
+    }
+
+
+def extract_json_object(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise
+        parsed = json.loads(cleaned[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("AI response was not a JSON object")
+    return parsed
+
+
+def evidence_capability_brief() -> str:
+    return """Evidence is a code-based BI/reporting framework where dashboards are Markdown pages under pages/**.
+Evidence pages combine narrative Markdown, fenced SQL queries, and components that consume query results.
+Good Evidence outputs are analytical reports or dashboards: clear sections, KPI cards, charts, tables, filters, and explanatory text.
+
+Common Evidence capabilities to ground suggestions in:
+- SQL queries in Markdown pages can define result sets for components.
+- BigValue cards work well for KPIs and headline metrics.
+- LineChart and BarChart work well for time trends, rankings, comparisons, and distributions.
+- DataTable works well for drill-down/detail rows and transparent source data behind a summary.
+- Grid/layout components can organize KPIs and charts into dashboard sections.
+- Input components such as Dropdown can support parameterized interactivity and simple filtering.
+- Evidence is strong for reproducible BI reports, executive summaries, analytical narratives, and lightweight interactive dashboards.
+
+Evidence-aware suggestion rules:
+- Prefer suggestions that can be implemented with SQL, Markdown, and built-in Evidence components.
+- Suggest interactivity only when it fits Evidence inputs/parameters, such as service type, borough, date/time bucket, or metric selectors.
+- Do not suggest generic app features like drag-and-drop dashboard builders, arbitrary canvas editing, collaborative commenting, writeback workflows, or heavy custom frontend behavior unless the user explicitly asks for custom components.
+- When proposing dashboard options, phrase them as Evidence-buildable choices, e.g. KPI summary + trend chart + ranking table, dropdown-filtered comparison, or narrative report with supporting charts.
+"""
+
+
+def ai_intention_suggestions(root: Path, title: str, intention: dict[str, Any], ai_options: dict[str, str]) -> dict[str, Any]:
+    catalog = source_catalog_for_prompt(root)
+    capabilities = evidence_capability_brief()
+    prompt = f"""You are helping prepare an Evidence BI analysis workspace.
+
+The user provided this analysis brief:
+
+Title: {title}
+Goal: {intention.get('goal', '')}
+Questions: {json.dumps(intention.get('questions', []), ensure_ascii=False)}
+Stakeholders: {json.dumps(intention.get('stakeholders', []), ensure_ascii=False)}
+Success criteria: {json.dumps(intention.get('successCriteria', []), ensure_ascii=False)}
+
+Evidence capabilities and limitations:
+{capabilities}
+
+Available Evidence data catalog, from safe source query files only:
+{catalog}
+
+Return only valid JSON with exactly this shape:
+{{
+  "suggestedQuestions": ["..."],
+  "suggestedDashboardOptions": ["..."],
+  "suggestedSuccessCriteria": ["..."],
+  "suggestedAssumptions": ["..."],
+  "clarifyingQuestions": ["..."]
+}}
+
+Rules:
+- Do not invent data that is not suggested by the catalog.
+- Prefer questions and dashboard options that can be implemented in Evidence with SQL, Markdown, built-in components, and simple inputs.
+- If suggesting interactivity, make it specific to Evidence-style inputs/parameters such as dropdown filters or metric selectors.
+- Avoid generic BI/app features that Evidence does not directly provide without custom frontend work.
+- Keep each suggestion concise and action-oriented.
+- Return at most 5 suggestedQuestions, 5 suggestedDashboardOptions, 5 suggestedSuccessCriteria, 5 suggestedAssumptions, and 3 clarifyingQuestions.
+- No markdown, no commentary, JSON only.
+"""
+    pi = shutil.which("pi")
+    if not pi:
+        raise ValueError("Could not find pi binary for AI enrichment")
+    completed = subprocess.run(
+        [
+            pi,
+            "-p",
+            "--no-session",
+            "--provider",
+            ai_options.get("provider") or "opencode",
+            "--model",
+            ai_options.get("model") or "mimo-v2.5-free",
+            "--thinking",
+            ai_options.get("thinking") or "medium",
+            "--no-tools",
+            prompt,
+        ],
+        cwd=root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "pi enrichment failed").strip()
+        raise ValueError(detail)
+    return extract_json_object(completed.stdout)
+
+
+def json_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def accept_suggestions(title: str, suggestions: list[str]) -> list[str]:
+    if not suggestions:
+        return []
+    print()
+    print(heading(title))
+    for index, suggestion in enumerate(suggestions, start=1):
+        print(f"{style(f'[{index}]', color='cyan')} {suggestion}")
+    print(muted("Enter numbers to accept, comma-separated. Empty accepts all; 'n' accepts none."))
+    while True:
+        value = input("Accept [all]: ").strip().lower()
+        if not value:
+            return [str(item).strip() for item in suggestions if str(item).strip()]
+        if value in {"n", "no", "none"}:
+            return []
+        selected: list[str] = []
+        ok = True
+        for token in re.split(r"[,\s]+", value):
+            if not token:
+                continue
+            if not token.isdigit() or not 1 <= int(token) <= len(suggestions):
+                ok = False
+                break
+            selected.append(str(suggestions[int(token) - 1]).strip())
+        if ok:
+            return dedupe_append([], selected)
+        print(warning_text("Please enter valid numbers, empty for all, or 'n' for none."))
+
+
+def collect_analysis_intention(root: Path, title: str, config: dict[str, Any]) -> dict[str, Any]:
+    if not sys.stdin.isatty():
+        return {
+            "goal": "",
+            "questions": [],
+            "stakeholders": [],
+            "successCriteria": [],
+            "dashboardOptions": [],
+            "assumptions": [],
+            "clarifications": [],
+            "openQuestions": [],
+        }
+
+    print()
+    print(heading("Analysis intention"))
+    print(muted("This brief will guide the Evidence dashboard agent in the new workspace."))
+    print()
+    goal = prompt_line("Main goal of this analysis")
+    questions = prompt_multiline("What specific questions should this dashboard answer?")
+    stakeholders = prompt_multiline("Who are the stakeholders or audience?")
+    success_criteria = prompt_multiline("What would make this analysis successful?")
+
+    intention: dict[str, Any] = {
+        "goal": goal,
+        "questions": questions,
+        "stakeholders": stakeholders,
+        "successCriteria": success_criteria,
+        "dashboardOptions": [],
+        "assumptions": [],
+        "clarifications": [],
+        "openQuestions": [],
+    }
+
+    if prompt_yes_no("Would you like AI suggestions to enrich this brief?", default=True):
+        ai_options = select_onboarding_ai(root, config)
+        intention["aiEnrichment"] = {
+            "provider": ai_options.get("provider") or "opencode",
+            "model": ai_options.get("model") or "mimo-v2.5-free",
+            "thinking": ai_options.get("thinking") or "medium",
+        }
+        print()
+        print(
+            success_text("Asking Pi for suggestions ")
+            + muted(
+                f"provider={intention['aiEnrichment']['provider']} "
+                f"model={intention['aiEnrichment']['model']} "
+                f"thinking={intention['aiEnrichment']['thinking']}"
+            )
+            + success_text("...")
+        )
+        try:
+            suggestions = ai_intention_suggestions(root, title, intention, ai_options)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(error_text(f"AI enrichment skipped: {exc}"), file=sys.stderr)
+        else:
+            intention["questions"] = dedupe_append(
+                questions,
+                accept_suggestions(
+                    "AI suggested additional dashboard questions:",
+                    json_string_list(suggestions.get("suggestedQuestions")),
+                ),
+            )
+            intention["dashboardOptions"] = accept_suggestions(
+                "AI suggested Evidence dashboard directions/options:",
+                json_string_list(suggestions.get("suggestedDashboardOptions")),
+            )
+            intention["successCriteria"] = dedupe_append(
+                success_criteria,
+                accept_suggestions(
+                    "AI suggested additional success criteria:",
+                    json_string_list(suggestions.get("suggestedSuccessCriteria")),
+                ),
+            )
+            intention["assumptions"] = accept_suggestions(
+                "AI suggested assumptions to record:",
+                json_string_list(suggestions.get("suggestedAssumptions")),
+            )
+            clarifications: list[dict[str, str]] = []
+            clarifying_questions = json_string_list(suggestions.get("clarifyingQuestions"))
+            if clarifying_questions:
+                print()
+                print(heading("AI suggested clarifying questions"))
+                print(muted("Answer or leave blank to keep as open questions."))
+            for question in clarifying_questions:
+                answer = input(f"{question}\n> ").strip()
+                if answer:
+                    clarifications.append({"question": question, "answer": answer})
+                else:
+                    intention["openQuestions"].append(question)
+            intention["clarifications"] = clarifications
+
+    print()
+    print(heading("Analysis intention summary"))
+    print(f"{style('Goal:', bold=True)} {intention.get('goal') or 'Not specified'}")
+    for label, key in [
+        ("Questions", "questions"),
+        ("Dashboard direction", "dashboardOptions"),
+        ("Stakeholders", "stakeholders"),
+        ("Success criteria", "successCriteria"),
+        ("Assumptions", "assumptions"),
+    ]:
+        values = intention.get(key) if isinstance(intention.get(key), list) else []
+        if values:
+            print(f"{style(label + ':', bold=True)}")
+            for value in values:
+                print(f"{style('-', color='cyan')} {value}")
+    print()
+    if not prompt_yes_no("Create workspace with this intention?", default=True):
+        raise KeyboardInterrupt("Workspace creation cancelled")
+    return intention
+
+
+def new_analysis(title: str, *, print_layout: bool = False, open_after_create: bool = True) -> int:
     title = title.strip()
-    if not title:
-        return error('Usage: cmux-evidence new "analysis name"')
 
     cwd = Path.cwd().resolve()
     root = git_root(cwd)
@@ -510,6 +1137,19 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
 
     if cwd != root:
         return error(f"Run `cmux-evidence new` from the main Evidence project root: {root}")
+
+    if not title:
+        if not sys.stdin.isatty():
+            return error('Usage: cmux-evidence new "analysis name"')
+        print("New Evidence analysis workspace")
+        title = prompt_line("Analysis title")
+        if not title:
+            return error("Analysis title is required")
+
+    try:
+        intention = collect_analysis_intention(root, title, config)
+    except KeyboardInterrupt as exc:
+        return error(str(exc) or "Workspace creation cancelled")
 
     pid = project_id(root, config)
     workspaces_root = workspace_dir(root, config)
@@ -547,7 +1187,7 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
         {
             "projectId": pid,
             "port": port,
-            "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
+            "agentCommand": "./bin/lumen-pi",
             "devCommand": f"npm run dev -- --port {port}",
             "url": url,
             "workspaceDir": str(workspaces_root),
@@ -565,14 +1205,30 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
         "port": port,
         "url": url,
         "status": "draft",
+        "intention": intention,
         "createdFrom": base_branch,
         "createdAt": created_at,
         "updatedAt": created_at,
     }
 
     try:
-        write_analysis_page(page_path, title)
-        copy_project_skill(root, worktree_path, "evidence-dashboard")
+        write_analysis_page(page_path, title, workspace_metadata)
+        for skill_name in [
+            "evidence-dashboard",
+            "evidence-dashboard-review",
+            "evidence-data-semantics",
+            "cmux-workspace",
+            "cmux-browser",
+            "cmux-pi",
+            "cmux-diagnostics",
+        ]:
+            copy_project_skill(root, worktree_path, skill_name)
+        copy_project_extension(root, worktree_path, "evidence-context.ts")
+        copy_project_extension(root, worktree_path, "lumen-bi")
+        copy_project_subdir(root, worktree_path, str(Path(".pi") / "themes"))
+        copy_project_subdir(root, worktree_path, str(Path(".pi") / "settings.json"))
+        copy_project_subdir(root, worktree_path, str(Path(".pi") / "package.json"))
+        copy_project_subdir(root, worktree_path, str(Path("bin") / "lumen-pi"))
         (worktree_path / ".cmux").mkdir(parents=True, exist_ok=True)
         (worktree_path / ".cmux" / "evidence.json").write_text(
             json.dumps(worktree_config, indent=2) + "\n"
@@ -606,6 +1262,10 @@ def new_analysis(title: str, *, print_layout: bool = False) -> int:
     print(f"Port:   {port}")
     print(f"URL:    {url}")
     print()
+    if not open_after_create:
+        print("CMUX open skipped (--no-open).")
+        return 0
+
     print("Opening CMUX...")
 
     return open_workspace(worktree_path, print_layout=print_layout)
@@ -777,6 +1437,7 @@ def context_command(*, print_context: bool = False) -> int:
             port=int(metadata.get("port") or config.get("port") or DEFAULT_PORT),
             url=str(metadata.get("url") or config.get("url") or ""),
             config=config,
+            metadata=metadata,
         )
     except (TypeError, ValueError) as exc:
         return error(str(exc))
@@ -1328,7 +1989,7 @@ def usage() -> str:
     return """Usage:
   cmux-evidence [--print-layout] [path]
   cmux-evidence open [--print-layout] [path-or-slug]
-  cmux-evidence new [--print-layout] "analysis name"
+  cmux-evidence new [--print-layout] [--no-open] ["analysis name"]
   cmux-evidence list
   cmux-evidence current
   cmux-evidence status
@@ -1361,7 +2022,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if command == "new":
-        return new_analysis(" ".join(args[1:]), print_layout=print_layout)
+        new_args = args[1:]
+        open_after_create = True
+        if "--no-open" in new_args:
+            new_args.remove("--no-open")
+            open_after_create = False
+        return new_analysis(" ".join(new_args), print_layout=print_layout, open_after_create=open_after_create)
 
     if command == "open":
         return open_analysis(args[1] if len(args) > 1 else ".", print_layout=print_layout)
