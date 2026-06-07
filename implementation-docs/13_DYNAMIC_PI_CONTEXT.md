@@ -44,14 +44,15 @@ You are helping build an Evidence dashboard inside a CMUX workspace.
 - Slug: revenue-quality-by-segment
 - Branch: analysis/revenue-quality-by-segment
 - Worktree: /Users/example/.local/share/cmux-evidence/workspaces/company-bi/revenue-quality-by-segment
-- Primary page: pages/analysis/revenue-quality-by-segment.md
+- Primary page: pages/analysis/revenue-quality-by-segment/index.md
 - Preview URL: http://localhost:3104/analysis/revenue-quality-by-segment
 - Dev server port: 3104
 
 ## Main task
 
 Help the user create and refine the Evidence dashboard for this analysis.
-Start with the primary page unless the user explicitly asks for broader changes.
+The workspace has three pages: Brief (index.md), Draft (draft.md), and Report (report.md).
+Start with the Draft page for exploration unless the user asks for a different target.
 
 ## Safe edit policy
 
@@ -143,7 +144,8 @@ You are helping build an Evidence dashboard inside a CMUX workspace.
 ## Main task
 
 Help the user create and refine the Evidence dashboard for this analysis.
-Start with the primary page unless the user explicitly asks for broader changes.
+The workspace has three pages: Brief (index.md), Draft (draft.md), and Report (report.md).
+Start with the Draft page for exploration unless the user asks for a different target.
 
 ## Safe edit policy
 
@@ -230,7 +232,7 @@ Suggested content:
 ```md
 Use the current dynamic Evidence dashboard workspace context.
 
-Please help me improve the active analysis page. First inspect `.cmux/workspace.json` and the primary Evidence page when needed. Use `/evidence-context` if the generated workspace/data context needs debugging. Then propose a short plan before editing.
+Please help me improve the active analysis workspace. First inspect `.cmux/workspace.json` and the relevant workspace pages (Brief, Draft, Report) when needed. Use `/evidence-context` if the generated workspace/data context needs debugging. Then propose a short plan before editing.
 ```
 
 This gives the user a convenient `/evidence-dashboard` prompt inside Pi.

@@ -2,6 +2,44 @@
 
 This directory contains project-local Pi extensions for Evidence-aware context, commands, and the LUMEN terminal UI identity.
 
+## `pi-ask-user/`
+
+Vendored copy of [edlsh/pi-ask-user](https://github.com/edlsh/pi-ask-user) v0.11.2.
+
+Provides the `ask_user` LLM-callable tool — an interactive Q&A primitive that lets the agent ask the user a focused question and get a structured response (single-select, multi-select, or freeform). Used by the `analysis-intention` extension for the iterative interview flow, and available to any Pi agent for high-stakes decisions.
+
+The vendored copy ships its own `package.json` (peerDeps only) and a local `node_modules/` containing `@sinclair/typebox@0.25.24`, which is not in the global Pi install.
+
+Also ships the companion `ask-user` skill (`skills/ask-user/SKILL.md`) — a decision-gate protocol that nudges the LLM to use `ask_user` for any high-stakes decision.
+
+Do not edit in place. To sync from upstream, replace `index.ts`, `single-select-layout.ts`, and `skills/ask-user/SKILL.md`, then re-run `npm install` in this directory.
+
+## `analysis-intention/`
+
+In-session analysis intention interview for Evidence BI workspaces.
+
+Replaces the CLI's `collect_analysis_intention` with an iterative, cumulative, LLM-driven flow using `ask_user`.
+
+Surfaces:
+- `/analysis-intention` slash command — entry point for the user
+- `start_analysis_intention` tool — returns the interview protocol + current state
+- `save_intention_draft` tool — persists the Intention, re-renders page, updates registry
+- `read_intention_draft` tool — reads current Intention
+- `session_start` hook — muted one-line tip when no intention exists
+- `before_agent_start` hook — small hint in dynamic context when intention is empty
+
+## `duckdb-bi/`
+
+Project-local DuckDB BI tools for safe, audited data exploration.
+
+Registers bounded `duckdb_*` LLM-callable tools for readonly SQL, Evidence-aware table discovery, schema/sample/profile checks, data quality reports, join coverage checks, exports, Markdown reports, and query audit log reads. The tools execute DuckDB through argument-array `spawn()` calls, validate project-local paths, block destructive SQL by default, and write runtime artifacts only under `.pi/duckdb/`.
+
+For this Evidence BI project, discovery defaults to semantic sources under `sources/*/*.sql` plus business files under `data/`, while generated/internal directories such as `.agent/`, `.cmux/`, `.evidence/`, `.pi/`, `.workspaces/`, and `.minio-data/` are excluded unless the agent explicitly requests all-mode discovery. Evidence source SQL can be addressed directly by names such as `tlc.trips` or `tlc.zones`.
+
+The companion `data-discovery` skill at `.pi/skills/data-discovery/SKILL.md` packages a repeatable discovery workflow: orient → shape → identify table kind → quality → join coverage → narrative → optional persistence. Use it when profiling CSV, Parquet, JSON/JSONL, or DuckDB files.
+
+Runtime outputs are intentionally local and ignored by Git via `.pi/duckdb/`; the extension source, tests, fixtures, and skill are the project resources that should be copied into generated Evidence workspaces.
+
 ## `lumen-bi/`
 
 Static LUMEN TUI header extension for Pi.
@@ -36,8 +74,9 @@ The project-local Pi package lives at:
 It bundles the LUMEN/Evidence resources used for dashboard-building sessions:
 
 - `evidence-context.ts`
+- `duckdb-bi/`
 - `lumen-bi/`
-- selected Evidence and CMUX skills
+- selected Evidence, DuckDB, and CMUX skills
 - `evidence-dashboard` prompt template
 - `lumen-bi-midnight` theme
 

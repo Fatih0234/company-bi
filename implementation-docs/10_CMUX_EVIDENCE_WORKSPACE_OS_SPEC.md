@@ -152,7 +152,7 @@ One analysis equals:
 ```text
 one Git branch
 one Git worktree
-one Evidence page
+one Evidence directory (multiple pages: Brief, Draft, Report)
 one Evidence dev server port
 one CMUX workspace
 one Pi session/context

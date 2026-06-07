@@ -316,20 +316,44 @@ function openWorkspaceBySlug(root: string, slug: string): void {
 function dashboardStateEntries(root: string, page: string): Array<[string, string]> {
 	if (!page) return [["Page", "not recorded"]];
 	const pagePath = join(root, page);
-	const text = safeReadText(pagePath, 120000);
-	if (!text) return [["Page", `${page} (missing or unreadable)`]];
+	const pageText = safeReadText(pagePath, 120000) || "";
+	const entries: Array<[string, string]> = [];
 
-	return [
-		["Page", `${page} ✓`],
-		["Brief", /##\s+Workspace Brief/i.test(text) ? "yes" : "no"],
-		["Checklist", /##\s+Build Checklist/i.test(text) || /- \[[ xX]\]/.test(text) ? "yes" : "no"],
-		["Starter query", /```sql\s+draft_query[\s\S]*?select\s+1\s+as\s+example_metric/i.test(text) ? "still present" : "replaced"],
-		["Placeholder text", /Replace this starter query|Describe the business question/i.test(text) ? "still present" : "not detected"],
-		["KPI cards", /<BigValue\b/i.test(text) ? "yes" : "no"],
-		["Charts", /<(LineChart|BarChart|AreaChart|ScatterPlot|BubbleChart)\b/i.test(text) ? "yes" : "no"],
-		["Tables", /<DataTable\b/i.test(text) ? "yes" : "no"],
-		["Inputs", /<(Dropdown|Checkbox|ButtonGroup|Slider|TextInput|DateInput|DateRange)\b/i.test(text) ? "yes" : "no"],
-	];
+	// Brief page
+	if (!pageText) {
+		entries.push(["Brief page", `${page} (missing)`]);
+	} else {
+		entries.push(["Brief page", `${page} ✓`]);
+		entries.push(["Brief", /##\s+Workspace Brief/i.test(pageText) ? "yes" : "no"]);
+		entries.push(["Checklist", /##\s+Build Checklist/i.test(pageText) || /- \[[ xX]\]/.test(pageText) ? "yes" : "no"]);
+		entries.push(["Workspace map", /##\s+Workspace Pages/i.test(pageText) ? "yes" : "no"]);
+	}
+
+	// Draft page
+	const draftPage = page.replace(/index\.md$/, "draft.md");
+	const draftPath = join(root, draftPage);
+	const draftText = safeReadText(draftPath, 120000) || "";
+	if (!draftText) {
+		entries.push(["Draft page", `${draftPage} (missing)`]);
+	} else {
+		entries.push(["Draft page", `${draftPage} ✓`]);
+		entries.push(["Starter query", /```sql\s+draft_query[\s\S]*?select\s+1\s+as\s+example_metric/i.test(draftText) ? "still present" : "replaced"]);
+		entries.push(["KPI cards", /<BigValue\b/i.test(draftText) ? "yes" : "no"]);
+		entries.push(["Charts", /<(LineChart|BarChart|AreaChart|ScatterPlot|BubbleChart)\b/i.test(draftText) ? "yes" : "no"]);
+		entries.push(["Tables", /<DataTable\b/i.test(draftText) ? "yes" : "no"]);
+		entries.push(["Inputs", /<(Dropdown|Checkbox|ButtonGroup|Slider|TextInput|DateInput|DateRange)\b/i.test(draftText) ? "yes" : "no"]);
+	}
+
+	// Report page
+	const reportPage = page.replace(/index\.md$/, "report.md");
+	const reportPath = join(root, reportPage);
+	if (existsSync(reportPath)) {
+		entries.push(["Report page", `${reportPage} ✓`]);
+	} else {
+		entries.push(["Report page", "not created"]);
+	}
+
+	return entries;
 }
 
 function detectDashboardState(root: string, page: string): string[] {
@@ -399,11 +423,17 @@ function renderWorkspaceSummary(root = findEvidenceRoot(), options: { full?: boo
 	if (!page) {
 		lines.push("Create or identify the primary Evidence analysis page for this workspace.");
 	} else {
-		const pageText = safeReadText(join(root, page), 120000) || "";
-		if (/```sql\s+draft_query[\s\S]*?select\s+1\s+as\s+example_metric/i.test(pageText)) {
-			lines.push("Replace the starter draft query with real airport demand/revenue metrics mapped to the brief.");
-		} else if (!/<(BigValue|LineChart|BarChart|DataTable)\b/i.test(pageText)) {
-			lines.push("Add Evidence-native KPI cards, at least one airport demand/revenue chart, and a supporting table.");
+		const draftPage = page.replace(/index\.md$/, "draft.md");
+		const draftText = safeReadText(join(root, draftPage), 120000) || "";
+		const reportPage = draftPage.replace(/draft\.md$/, "report.md");
+		if (!draftText) {
+			lines.push("Create the Draft page and start exploring the data.");
+		} else if (/```sql\s+draft_query[\s\S]*?select\s+1\s+as\s+example_metric/i.test(draftText)) {
+			lines.push("Replace the starter draft query with real metrics mapped to the brief.");
+		} else if (!/<(BigValue|LineChart|BarChart|DataTable)\b/i.test(draftText)) {
+			lines.push("Add Evidence-native KPI cards, at least one chart, and a supporting table to the Draft page.");
+		} else if (!existsSync(join(root, reportPage))) {
+			lines.push("Move validated findings from Draft to the Report page.");
 		} else {
 			lines.push("Review the rendered preview, fix visible issues, then update the build checklist and remaining questions.");
 		}

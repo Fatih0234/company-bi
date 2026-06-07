@@ -7,16 +7,21 @@
   "pi": {
     "extensions": [
       "./extensions/evidence-context.ts",
+      "./extensions/pi-ask-user",
+      "./extensions/analysis-intention",
+      "./extensions/duckdb-bi",
       "./extensions/lumen-bi"
     ],
     "skills": [
       "./skills/evidence-dashboard",
       "./skills/evidence-dashboard-review",
       "./skills/evidence-data-semantics",
+      "./skills/data-discovery",
       "./skills/cmux-workspace",
       "./skills/cmux-browser",
       "./skills/cmux-pi",
-      "./skills/cmux-diagnostics"
+      "./skills/cmux-diagnostics",
+      "./skills/ask-user"
     ],
     "prompts": [
       "./prompts/evidence-dashboard.md"
@@ -26,7 +31,9 @@
     ]
   },
   "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
   }
 }

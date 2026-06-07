@@ -1,0 +1,12 @@
+{
+  "name": "pi-ask-user",
+  "version": "0.11.2",
+  "type": "module",
+  "private": true,
+  "description": "Vendored from edlsh/pi-ask-user v0.11.2; do not edit in place, sync from upstream when bumping.",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-tui": ">=0.74.0",
+    "@sinclair/typebox": "^0.34.49"
+  }
+}

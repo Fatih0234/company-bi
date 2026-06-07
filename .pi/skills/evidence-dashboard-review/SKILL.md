@@ -19,9 +19,11 @@ Use this skill when acting as a BI/product reviewer for an Evidence dashboard. T
 
 1. Use the injected dynamic Evidence context as the current workspace brief.
 2. Run or ask the user to run `/workspace-summary` when you need a quick page-state summary.
-3. Inspect the primary page from `.cmux/workspace.json` or dynamic context.
-4. Inspect safe source SQL files only when metric meaning or data availability affects the review.
-5. Use CMUX preview helpers when visible rendering matters.
+3. Inspect the **Brief** page (primary page) from `.cmux/workspace.json` or dynamic context.
+4. Inspect the **Draft** page for exploration quality and work-in-progress.
+5. Inspect the **Report** page if it exists for polished dashboard quality.
+6. Inspect safe source SQL files only when metric meaning or data availability affects the review.
+7. Use CMUX preview helpers when visible rendering matters.
 
 Useful commands:
 
@@ -37,7 +39,9 @@ Useful commands:
 
 ### Business alignment
 
-- Does the page clearly answer the workspace goal?
+- Does the **Brief** page clearly state the workspace goal and intention?
+- Does the **Draft** page have productive exploration toward the goal?
+- Does the **Report** page (if it exists) clearly answer the workspace goal?
 - Are the stated questions addressed by visible sections?
 - Are stakeholders and success criteria reflected in the dashboard design?
 - Are open questions or caveats visible where needed?

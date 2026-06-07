@@ -1,0 +1,10 @@
+order_id,customer_id,order_date,region,channel,product,quantity,unit_price,revenue
+1,C001,2026-01-05,EMEA,web,Widget A,2,10,20
+2,C002,2026-01-07,NA,partner,Widget B,1,25,25
+3,C001,2026-02-10,EMEA,web,Widget A,3,10,30
+4,C003,2026-02-15,APAC,web,Widget C,1,40,40
+5,C004,2026-03-01,NA,retail,Widget A,0,10,0
+6,C005,2026-03-11,EMEA,partner,Widget B,2,25,50
+7,C006,,EMEA,web,Widget B,1,25,25
+8,C006,2026-03-20,EMEA,web,Widget B,1,25,25
+8,C006,2026-03-20,EMEA,web,Widget B,1,25,25

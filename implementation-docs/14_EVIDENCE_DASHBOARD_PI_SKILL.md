@@ -60,7 +60,7 @@ One analysis usually maps to:
 
 - one Git branch
 - one Git worktree
-- one Evidence page
+- one Evidence directory (multiple pages: Brief, Draft, Report)
 - one Evidence dev server port
 - one CMUX workspace
 - one browser preview pane
@@ -97,7 +97,7 @@ For dashboard creation or revision:
 3. Inspect available sources/queries/schema notes when needed.
 4. Propose a short plan before broad edits.
 5. Make small changes.
-6. Prefer the active analysis page as the first edit target.
+6. Prefer the Draft page as the first edit target for exploration.
 7. Use Evidence components idiomatically.
 8. Check the rendered preview in CMUX when possible.
 9. Fix visible errors before reporting completion.

@@ -32,6 +32,7 @@ connection.options.yaml
 
 # Local agent/index state
 .agent/
+.pi/duckdb/
 .pi/todos/
 .pi/skills/cmux/
 .pi/skills/cmux-*/

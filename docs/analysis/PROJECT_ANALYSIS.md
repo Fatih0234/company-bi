@@ -34,7 +34,7 @@ The data behind the first demo is a 3-month slice of NYC TLC taxi trip data (yel
 │  │  ├── .cmux/workspace.json  (durable analysis metadata)       │   │
 │  │  ├── .cmux/evidence.json   (per-worktree config)             │   │
 │  │  ├── .cmux/pi-context.md   (legacy/fallback snapshot)        │   │
-│  │  ├── pages/analysis/<slug>.md (analysis page w/ brief)       │   │
+│  │  ├── pages/analysis/<slug>/  (analysis directory: Brief, Draft, Report) │   │
 │  │  ├── .pi/                  (copied package: ext + skills)    │   │
 │  │  └── bin/lumen-pi          (wrapper → `pi -e ./.pi`)         │   │
 │  └───┬──────────────────────────────────────────────────────────┘   │
@@ -86,34 +86,35 @@ Notable design choices baked in:
 - **`publish` is conservative.** Validates, prints diff, requires typing `publish` literally, then commits/pushes/opens PR. No auto-merge.
 - **Non-interactive flows never block.** If stdin is not a TTY, `new` returns an empty `intention` object and skips the prompts. Same for `pi -p --no-session` style AI enrichment in CI/script use.
 
-## 4. The onboarding flow
+## 4. The onboarding flow (two-stage)
 
-This is the most user-facing piece and it has been iterated on heavily (see `17_ANALYSIS_INTENTION_ONBOARDING.md`, `18_ONBOARDING_TEST_NOTES.md`, `19_ONBOARDING_TUI_AND_PI_MODEL_CONTEXT.md`).
+The workspace creation and the analysis intention capture are now **decoupled** into two independent stages.
 
-`cmux-evidence new "My Analysis"` runs:
+### Stage 1: workspace shell (`bin/cmux-evidence new "Title"`)
 
 1. **Title prompt** (skipped if provided as arg or non-TTY).
-2. **Intention brief** (interactive TTY only):
-   - Main goal
-   - Specific dashboard questions (multi-line)
-   - Stakeholders / audience
-   - Success criteria
-   - Optional: **AI enrichment** via Pi headless (`pi -p --no-session --provider ... --model ... --thinking ... --no-tools`)
-     - Uses safe source SQL files as a data catalog
-     - Includes an Evidence capability brief so suggestions are grounded in what Evidence can build
-     - Returns `suggestedQuestions`, `suggestedDashboardOptions`, `suggestedSuccessCriteria`, `suggestedAssumptions`, `clarifyingQuestions`
-     - User picks via numbered accept/reject
-   - Clarifying questions answered inline or stored as `openQuestions`
-3. **Summary review** of the assembled brief.
-4. **Final confirmation** (cancel before worktree/branch are created).
+2. **Worktree + branch + port + page stub + registry entry** with `intention: {}` (empty).
+3. No interview, no AI enrichment — just the mechanical shell.
+
+### Stage 2: analysis intention (in-session Pi extension, optional)
+
+After the workspace exists, the user can optionally run `/analysis-intention` in a Pi session. The `analysis-intention` extension drives an **iterative, cumulative interview** using the `ask_user` tool (from the vendored `pi-ask-user` extension):
+
+1. The LLM gathers context from source SQL, workspace metadata, and the dynamic context.
+2. One focused question per turn via `ask_user` (goal → questions → stakeholders → success criteria → dashboard options → assumptions → open questions).
+3. The LLM refines questions and suggests answers based on context.
+4. When the brief is complete, calls `save_intention_draft`.
+5. The extension writes `.cmux/workspace.json.intention`, re-renders the page, updates `.cmux/registry.json`, and commits.
 
 The intention is stored durably in `.cmux/workspace.json.intention` and rendered into:
-- `.cmux/pi-context.md` (legacy/fallback snapshot)
-- The visible "Workspace Brief" section in the generated analysis page
+- The visible "Workspace Brief" section in the analysis page
+- The dynamic Evidence context (injected before each user turn by `evidence-context.ts`)
 
-The AI enrichment prompt and dataset are explicitly **safe** — they only read `sources/*/*.sql`, never `.env*` or `**/connection.yaml`. The model call uses `--no-tools` and `--no-session`.
+### Why two stages?
 
-The default AI model is read from Pi's settings (`defaultProvider`, `defaultModel`, `defaultThinkingLevel`) with project fallback to `.cmux/evidence.json.onboardingAi`. The model picker is no longer shown by default — onboarding just uses the configured/default model.
+The CLI handles mechanical workspace creation (which is fast and scriptable). The interview is optional, context-rich, and benefits from being in a Pi session where the LLM has access to source SQL, prior answers, and the user's conversational context. The LLM can refine questions and suggest answers based on what it sees in the data.
+
+For details, see `implementation-docs/21_IN_SESSION_ANALYSIS_INTENTION.md` (current design) and `17_ANALYSIS_INTENTION_ONBOARDING.md` (historical record of the original CLI-based flow).
 
 ## 5. The Pi side
 
@@ -123,7 +124,7 @@ Two pieces make the LUMEN BI agent feel specialized:
 
 Bundles a curated set of resources:
 
-- **Extensions:** `evidence-context.ts`, `lumen-bi/`
+- **Extensions:** `evidence-context.ts`, `pi-ask-user/`, `analysis-intention/`, `lumen-bi/`
 - **Skills:** `evidence-dashboard`, `evidence-dashboard-review`, `evidence-data-semantics`, `cmux-workspace`, `cmux-browser`, `cmux-pi`, `cmux-diagnostics`
 - **Prompts:** `evidence-dashboard.md` (the `/evidence-dashboard` prompt)
 - **Themes:** `lumen-bi-midnight.json`

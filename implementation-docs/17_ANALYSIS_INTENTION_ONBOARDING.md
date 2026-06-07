@@ -1,5 +1,9 @@
 # Step 17: Analysis Intention Onboarding
 
+> **⚠️ REPLACED BY STEP 21.** The CLI interview has been moved into an in-session Pi extension.
+> See `implementation-docs/21_IN_SESSION_ANALYSIS_INTENTION.md` for the current design.
+> This file is kept as a historical record.
+
 ## Goal
 
 Every generated Evidence analysis workspace should begin with an analytical brief, not just branch/worktree metadata.

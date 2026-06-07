@@ -1,0 +1,9 @@
+LocationID,Borough,Zone,service_zone
+1,EWR,Newark Airport,EWR
+2,Queens,Jamaica Bay,Boro Zone
+3,Manhattan,Governor's Island/Ellis Island/Liberty Island,Yellow Zone
+4,Manhattan,Governor's Island/Ellis Island/Liberty Island,Yellow Zone
+5,Manhattan,Governor's Island/Ellis Island/Liberty Island,Yellow Zone
+6,Unknown,N/A,Boro Zone
+7,Brooklyn,Corona,Boro Zone
+8,Staten Island,Corona,N/A

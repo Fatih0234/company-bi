@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Launch Pi as the LUMEN Evidence BI assistant for this project/worktree.
 #
-# This intentionally disables globally discovered Pi resources, then loads the
-# project-local .pi package. Provider/model/auth settings still come from the
-# normal Pi settings stack unless explicitly overridden by the user.
+# Loads the project-local .pi package alongside globally discovered Pi resources
+# (extensions, skills, prompts, themes). Provider/model/auth settings still come
+# from the normal Pi settings stack unless explicitly overridden by the user.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -14,10 +14,6 @@ SESSION_DIR="$PROJECT_ROOT/.cmux/pi-sessions"
 mkdir -p "$SESSION_DIR"
 
 exec pi \
-  --no-extensions \
-  --no-skills \
-  --no-prompt-templates \
-  --no-themes \
   --session-dir "$SESSION_DIR" \
   -e "$PROJECT_ROOT/.pi" \
   "$@"

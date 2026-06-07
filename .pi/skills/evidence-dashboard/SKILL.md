@@ -23,11 +23,26 @@ One analysis usually maps to:
 
 - one Git branch
 - one Git worktree
-- one Evidence page
+- one Evidence directory (multiple pages)
 - one Evidence dev server port
 - one CMUX workspace
 - one browser preview pane
 - one Pi agent pane
+
+### Workspace page convention
+
+Each analysis workspace uses a directory under `pages/analysis/<slug>/`:
+
+- **Brief page** (`index.md`) — The landing page. Contains the workspace intention, goal, and a `Workspace Pages` map. Always keep this up to date.
+- **Draft page** (`draft.md`) — The sandbox. Put messy queries, experiments, and work-in-progress here. No quality standards.
+- **Report page** (`report.md`) — The polished dashboard. Move validated findings here. Must be clean, readable, and production-quality.
+- **Focused deep-dives** (`[topic].md`) — Optional focused pages for specific angles (e.g., `seasonal-trends.md`).
+
+**Rules:**
+- When exploring a new idea or testing a query, work in the **Draft** page.
+- When a finding is validated and ready for the user, move it to the **Report** page.
+- Update the Brief page's `Workspace Pages` table when you create new pages.
+- Create new pages in the workspace directory for focused deep-dives.
 
 ## Default edit policy
 
@@ -70,8 +85,8 @@ For dashboard creation or revision:
 3. Inspect available sources/queries/schema notes when needed; use `evidence-data-semantics` for metric-heavy work.
 4. Propose a short plan before broad edits.
 5. Make small changes.
-6. Prefer the active analysis page as the first edit target.
-7. Preserve and update the visible `Workspace Brief` / build checklist on generated analysis pages when the user's goal, scope, or completion state changes.
+6. Prefer the **Draft** page as the first edit target for exploration. Work in the **Report** page for polished findings.
+7. Preserve and update the visible `Workspace Brief` on the **Brief** page when the user's goal, scope, or completion state changes. Update the `Workspace Pages` table when the page structure changes.
 8. Use Evidence components idiomatically.
 9. Check the rendered preview in CMUX when possible.
 10. Fix visible errors before reporting completion.

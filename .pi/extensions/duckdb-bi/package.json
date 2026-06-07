@@ -1,0 +1,23 @@
+{
+  "name": "duckdb-bi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project-local Pi Coding Agent extension exposing safe, audited DuckDB BI tools.",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test tests/findings.test.ts tests/evidence-sources.test.mjs tests/join-coverage.test.mjs tests/skill-discovery.test.mjs"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "jiti": "^2.7.0"
+  }
+}

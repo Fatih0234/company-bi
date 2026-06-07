@@ -1,0 +1,11 @@
+{
+  "name": "analysis-intention",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "In-session analysis intention interview for Evidence BI workspaces.",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-tui": ">=0.74.0"
+  }
+}

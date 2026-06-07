@@ -1,0 +1,7 @@
+customer_id,segment,country,signup_date
+C001,SMB,DE,2025-11-01
+C002,Enterprise,US,2025-10-15
+C003,SMB,JP,2025-12-20
+C004,Midmarket,US,2026-01-10
+C005,Enterprise,DE,2026-01-22
+C006,,DE,2026-02-02
