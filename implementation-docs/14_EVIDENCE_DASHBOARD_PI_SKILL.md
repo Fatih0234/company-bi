@@ -10,12 +10,15 @@ The skill should be loaded on demand when the user asks Pi to create, revise, va
 
 ## Why this matters
 
-The dynamic context file tells Pi about the current workspace. The skill tells Pi the repeatable workflow and domain rules for Evidence dashboard authoring.
+The dynamic Evidence context extension tells Pi about the current workspace before each user turn. The skill tells Pi the repeatable workflow and domain rules for Evidence dashboard authoring.
 
 Together:
 
-- `.cmux/pi-context.md` = current workspace facts.
-- `.pi/skills/evidence-dashboard/SKILL.md` = durable Evidence + CMUX workflow instructions.
+- `.pi/extensions/evidence-context.ts` = current workspace facts, analysis intention, and safe data source catalog.
+- `.cmux/workspace.json` = durable analysis metadata used by the extension.
+- `.pi/skills/evidence-dashboard/SKILL.md` = durable Evidence + CMUX build/revision workflow instructions.
+- `.pi/skills/evidence-dashboard-review/SKILL.md` = read-only BI/product review and QA workflow.
+- `.pi/skills/evidence-data-semantics/SKILL.md` = safe metric/source SQL reasoning workflow.
 
 ## Create skill directory
 
@@ -43,11 +46,13 @@ Use this skill when working in the company-bi Evidence dashboard workspace.
 
 ## First steps
 
-1. Read `.cmux/workspace.json` if it exists.
-2. Read `.cmux/pi-context.md` if it exists.
-3. Read `.cmux/evidence.json`.
-4. Identify the primary Evidence page from metadata.
-5. Inspect relevant files before editing.
+1. Treat the injected dynamic Evidence context as the current workspace/data context.
+2. Read `.cmux/workspace.json` if durable analysis metadata is needed.
+3. Read `.cmux/evidence.json` if project commands, preview URL, ports, or edit policy are needed.
+4. Use `/evidence-context` if the generated context needs debugging.
+5. Read `.cmux/pi-context.md` only as a legacy/fallback snapshot if needed.
+6. Identify the primary Evidence page from metadata.
+7. Inspect relevant files before editing.
 
 ## Workspace model
 
@@ -102,7 +107,7 @@ For dashboard creation or revision:
 
 When the user asks whether the dashboard looks correct, or after substantial edits:
 
-1. Find the active preview URL from `.cmux/workspace.json` or `.cmux/pi-context.md`.
+1. Find the active preview URL from the injected dynamic context, `.cmux/workspace.json`, or `./bin/cmux-evidence preview-url`.
 2. Use CMUX browser automation if a browser surface is available.
 3. Snapshot or evaluate the page.
 4. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
@@ -139,6 +144,33 @@ If those commands do not exist yet, use the closest project scripts and explain 
 - Use CMUX notifications for long-running or blocked work when available.
 ```
 
+## Specialized skill split
+
+The implementation now keeps `evidence-dashboard` as the main builder skill and adds two narrower skills:
+
+```text
+.pi/skills/evidence-dashboard-review/SKILL.md
+.pi/skills/evidence-data-semantics/SKILL.md
+```
+
+Use `evidence-dashboard-review` for dashboard critique, visible QA, placeholder detection, metric clarity checks, and recommended improvements. Its default posture is read-only unless the user asks for edits.
+
+Use `evidence-data-semantics` when the task depends on metric definitions, source SQL interpretation, inferred dimensions/measures, or business assumptions. It explicitly preserves the no-secret boundary around `.env*` and `**/connection.yaml`.
+
+Generated workspaces copy these app skills plus the selected CMUX skills that are useful for Evidence dashboard work:
+
+```text
+evidence-dashboard
+evidence-dashboard-review
+evidence-data-semantics
+cmux-workspace
+cmux-browser
+cmux-pi
+cmux-diagnostics
+```
+
+Broader CMUX customization/settings/keybinding skills are intentionally not copied by default.
+
 ## Add references directory later if needed
 
 Only add reference files when they are useful. Possible future files:
@@ -153,13 +185,13 @@ Do not overbuild this now.
 
 ## Ensure Pi can discover it
 
-Project-local skills under `.pi/skills/` should be discoverable by Pi when launched from the project/worktree. If needed, pass it explicitly in `agentCommand` later:
+Project-local skills under `.pi/skills/` are bundled by `.pi/package.json` and loaded through the LUMEN launcher:
 
 ```bash
-pi --skill .pi/skills/evidence-dashboard --append-system-prompt .cmux/pi-context.md
+./bin/lumen-pi
 ```
 
-Prefer implicit discovery first. Use explicit `--skill` only if discovery is unreliable in generated worktrees.
+The launcher intentionally disables unrelated global Pi resources, then loads the app-local package with `-e ./.pi`.
 
 ## Worktree copying concern
 
@@ -170,8 +202,10 @@ If `.pi/skills/evidence-dashboard` is intentionally untracked, then `cmux-eviden
 ## Acceptance criteria
 
 - `.pi/skills/evidence-dashboard/SKILL.md` exists.
-- The skill has frontmatter with `name` and `description`.
-- The description clearly triggers for Evidence dashboard work.
+- `.pi/skills/evidence-dashboard-review/SKILL.md` exists.
+- `.pi/skills/evidence-data-semantics/SKILL.md` exists.
+- Each skill has frontmatter with `name` and `description`.
+- Descriptions clearly trigger for build/revision, review/QA, and data-semantics work respectively.
 - The skill tells Pi to read `.cmux/workspace.json` and `.cmux/pi-context.md`.
 - The skill includes safe edit policy.
 - The skill includes CMUX browser preview inspection workflow.
