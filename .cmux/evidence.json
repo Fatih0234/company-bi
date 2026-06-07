@@ -2,7 +2,7 @@
   "type": "evidence",
   "projectId": "company-bi",
   "port": 3000,
-  "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
+  "agentCommand": "./bin/lumen-pi",
   "devCommand": "npm run dev",
   "url": "http://localhost:3000",
   "workspaceDir": ".workspaces",

@@ -1,0 +1,32 @@
+{
+  "name": "company-bi-lumen-pi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LUMEN Pi package for Evidence BI dashboard workspaces.",
+  "keywords": ["pi-package", "evidence", "bi", "dashboard", "lumen"],
+  "pi": {
+    "extensions": [
+      "./extensions/evidence-context.ts",
+      "./extensions/lumen-bi"
+    ],
+    "skills": [
+      "./skills/evidence-dashboard",
+      "./skills/evidence-dashboard-review",
+      "./skills/evidence-data-semantics",
+      "./skills/cmux-workspace",
+      "./skills/cmux-browser",
+      "./skills/cmux-pi",
+      "./skills/cmux-diagnostics"
+    ],
+    "prompts": [
+      "./prompts/evidence-dashboard.md"
+    ],
+    "themes": [
+      "./themes/lumen-bi-midnight.json"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}

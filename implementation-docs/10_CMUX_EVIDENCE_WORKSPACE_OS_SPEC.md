@@ -81,7 +81,7 @@ Create a dashboard showing revenue quality by customer segment and month.
 
 Expected result:
 
-1. Pi reads the generated context file.
+1. Pi receives generated workspace context from the project extension before each user turn.
 2. Pi edits the intended Evidence page first.
 3. Pi asks before changing shared sources/components.
 4. Pi uses CMUX browser automation to inspect the preview.
@@ -128,7 +128,7 @@ Expected result:
 - Project-local registry compatibility.
 - `cmux-evidence list/open/current/status` commands.
 - CMUX Command Palette actions for product-level operations.
-- Dynamic Pi context file generated per analysis.
+- Dynamic Pi context generated per analysis from durable workspace metadata and safe source files.
 - Project-local Pi skill for Evidence dashboard authoring.
 - Browser preview inspection helpers.
 - Validation and diff commands.
@@ -178,13 +178,13 @@ Avoid exposing many implementation details through the palette.
 
 ### 4. Pi should be workspace-aware by default
 
-The launcher should start Pi with dynamic context:
+The launcher should start the app-specific LUMEN Pi wrapper and rely on the project-local package/extension for every-turn context injection:
 
 ```bash
-pi --append-system-prompt .cmux/pi-context.md
+./bin/lumen-pi
 ```
 
-The user should not need to explain the active page, port, URL, branch, or safe edit policy every time.
+The wrapper disables unrelated global Pi resources and loads `.pi/package.json`, which bundles the LUMEN/Evidence extensions, skills, prompt, and theme. The context extension reads durable workspace metadata and safe source files before each user turn. The user should not need to explain the active page, port, URL, branch, data source catalog, or safe edit policy every time, even across new sessions.
 
 ### 5. The rendered preview matters
 
@@ -242,7 +242,7 @@ Extend `.cmux/evidence.json`:
   "projectId": "company-bi",
   "port": 3000,
   "analysisBasePort": 3100,
-  "agentCommand": "pi --append-system-prompt .cmux/pi-context.md",
+  "agentCommand": "./bin/lumen-pi",
   "devCommand": "npm run dev",
   "url": "http://localhost:3000",
   "workspaceDir": "~/.local/share/cmux-evidence/workspaces/company-bi",

@@ -4,6 +4,8 @@
 
 Before answering questions about indexed external sources, read the matching `.agent/repos/<name>/INDEX.md` navigation layer first.
 
+- **pi** — Pi Agent Harness Mono Repo: pi.dev domain graciously donated by. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/earendil-works/pi/main`. Agent index: `.agent/repos/pi/INDEX.md`
+- **cmux** — الميزات: > تمت هذه الترجمة بواسطة Claude. إذا كانت لديك اقتراحات للتحسين، يرجى فتح PR. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/manaflow-ai/cmux/main`. Agent index: `.agent/repos/cmux/INDEX.md`
 - **evidence** — [Docs](https://docs.evidence.dev) | [Examples](https://evidence.dev/examples) | [Slack](https://slack.evidence.dev): Business Intelligence as Code: Generate reports using SQL and m. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/evidence-dev/evidence/main`. Agent index: `.agent/repos/evidence/INDEX.md`
 
 ## Indexed documentation sources
