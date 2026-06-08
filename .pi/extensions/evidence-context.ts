@@ -222,9 +222,24 @@ function formatDate(value: unknown): string {
 	return date.toISOString().slice(0, 10);
 }
 
-function registryPathFor(root: string, evidenceConfig: JsonObject | undefined): string {
+function isContentWorkspace(evidenceConfig: JsonObject | undefined, workspace?: JsonObject | undefined): boolean {
+	if (stringValue(workspace?.kind) === "lumen-analysis-workspace") return true;
+	const mode = stringValue(workspace?.workspaceMode) || stringValue(evidenceConfig?.workspaceMode);
+	const hasSplitRoots = Boolean(workspace?.workspaceRoot || workspace?.shadowRuntimeRoot || evidenceConfig?.workspaceRoot || evidenceConfig?.shadowRuntimeRoot);
+	return mode === "content-only" && hasSplitRoots;
+}
+
+function runtimeRootFor(root: string, evidenceConfig: JsonObject | undefined, workspace?: JsonObject | undefined): string {
+	const configured = stringValue(workspace?.runtimeRoot) || stringValue(evidenceConfig?.runtimeRoot);
+	if (configured) return isAbsolute(configured) ? configured : resolve(root, configured);
+	return root;
+}
+
+function registryPathFor(root: string, evidenceConfig: JsonObject | undefined, workspace?: JsonObject | undefined): string {
 	const configured = stringValue(evidenceConfig?.registryPath) || join(".cmux", "registry.json");
-	return isAbsolute(configured) ? configured : join(root, configured);
+	if (isAbsolute(configured)) return configured;
+	const baseRoot = isContentWorkspace(evidenceConfig, workspace) ? runtimeRootFor(root, evidenceConfig, workspace) : root;
+	return join(baseRoot, configured);
 }
 
 function projectIdFor(root: string, evidenceConfig: JsonObject | undefined): string {
@@ -238,7 +253,7 @@ function workspaceItems(root = findEvidenceRoot()): { items: WorkspaceListItem[]
 	const currentSlug = stringValue(currentWorkspace?.slug);
 	const currentPath = resolve(root);
 	const projectId = projectIdFor(root, evidenceConfig);
-	const registryPath = registryPathFor(root, evidenceConfig);
+	const registryPath = registryPathFor(root, evidenceConfig, currentWorkspace);
 	const registry = safeReadJson(registryPath);
 	const projects = registry?.projects;
 	const project = projects && typeof projects === "object" && !Array.isArray(projects) ? (projects as JsonObject)[projectId] : undefined;
@@ -289,7 +304,9 @@ function renderWorkspaceListText(root = findEvidenceRoot()): string {
 	return lines.join("\n").trimEnd();
 }
 
-function projectRootForCommand(root: string, evidenceConfig: JsonObject | undefined): string {
+function projectRootForCommand(root: string, evidenceConfig: JsonObject | undefined, workspace?: JsonObject | undefined): string {
+	const runtimeRoot = runtimeRootFor(root, evidenceConfig, workspace);
+	if (existsSync(join(runtimeRoot, "bin", "cmux-evidence"))) return runtimeRoot;
 	const workspaceDir = stringValue(evidenceConfig?.workspaceDir);
 	if (workspaceDir) {
 		const resolvedWorkspaceDir = isAbsolute(workspaceDir) ? workspaceDir : join(root, workspaceDir);
@@ -303,7 +320,8 @@ function projectRootForCommand(root: string, evidenceConfig: JsonObject | undefi
 
 function openWorkspaceBySlug(root: string, slug: string): void {
 	const evidenceConfig = safeReadJson(join(root, ".cmux", "evidence.json"));
-	const commandRoot = projectRootForCommand(root, evidenceConfig);
+	const workspace = safeReadJson(join(root, ".cmux", "workspace.json"));
+	const commandRoot = projectRootForCommand(root, evidenceConfig, workspace);
 	const script = join(commandRoot, "bin", "cmux-evidence");
 	const command = existsSync(script) ? script : "cmux-evidence";
 	execFileSync(command, ["open", slug], {
@@ -452,13 +470,64 @@ function renderWorkspaceCleanupPlan(root = findEvidenceRoot()): string {
 	const branch = stringValue(workspace?.branch) || currentGitBranch(root);
 	const page = stringValue(workspace?.page);
 	const url = stringValue(workspace?.url) || stringValue(evidenceConfig?.url);
-	const registryPath = registryPathFor(root, evidenceConfig);
+	const registryPath = registryPathFor(root, evidenceConfig, workspace);
+	const contentMode = isContentWorkspace(evidenceConfig, workspace);
+	const runtimeRoot = runtimeRootFor(root, evidenceConfig, workspace);
+	const shadowRuntimeRoot = stringValue(workspace?.shadowRuntimeRoot) || stringValue(evidenceConfig?.shadowRuntimeRoot);
 	const gitStatus = safeExec("git", ["status", "--short"], root);
 	const changedLines = gitStatus === undefined || !gitStatus ? [] : gitStatus.split("\n").filter(Boolean);
 	const upstream = safeExec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root);
 	const aheadBehind = upstream ? safeExec("git", ["rev-list", "--left-right", "--count", `${upstream}...HEAD`], root) : undefined;
 	const hasChanges = changedLines.length > 0;
 	const isAnalysisWorkspace = Boolean(workspace?.kind === "evidence-analysis" || page || slug !== basename(root));
+
+	if (contentMode) {
+		const lines = [
+			"# Workspace Cleanup Plan",
+			"",
+			"This is a read-only safety review. It does not archive, delete, switch, or mutate any workspace.",
+			"",
+			"## Current content workspace",
+			"",
+			`- Title: ${title}`,
+			`- Slug: ${slug}`,
+			`- Status: ${status}`,
+			`- Workspace root: ${root}`,
+			`- Runtime root: ${runtimeRoot} (runtime-managed)`,
+			`- Shadow runtime: ${shadowRuntimeRoot || "not recorded"} (generated; safe to regenerate)`,
+			`- Registry: ${registryPath}`,
+		];
+		if (page) lines.push(`- Primary page: ${page} (${existsSync(join(root, page)) ? "exists" : "missing"})`);
+		if (url) lines.push(`- Preview URL: ${url}`);
+		lines.push(
+			"",
+			"## Risk checks",
+			"",
+			"- Git checkout: no; this is a content-only analysis workspace.",
+			`- Content files present: ${existsSync(join(root, "pages")) ? "pages/ exists" : "pages/ missing"}`,
+			`- Shadow runtime present: ${shadowRuntimeRoot && existsSync(shadowRuntimeRoot) ? "yes" : "no or not recorded"}`,
+			"",
+			"## Safe options",
+			"",
+			"1. Keep it active",
+			"   - Best when the analysis is still useful or actively being edited.",
+			"2. Archive it in metadata",
+			"   - Recommended first cleanup step for everyday users.",
+			"3. Export or preserve useful pages/reports/data, then archive",
+			"   - Recommended before deleting any content workspace.",
+			"4. Delete only the generated shadow runtime",
+			"   - Usually safe; `cmux-evidence open`/`validate` can regenerate it for content-only workspaces.",
+			"5. Delete the content workspace",
+			"   - Destructive. Only safe after confirming pages, reports, data, and DuckDB artifacts are disposable or exported.",
+			"",
+			"## Recommendation",
+			"",
+			status === "archived"
+				? "This workspace is already archived. If disk cleanup is needed, delete the generated shadow runtime first and preserve content until explicitly reviewed."
+				: "Archive first rather than deleting. Treat the shadow runtime as disposable and the content workspace as the valuable deliverable.",
+		);
+		return lines.join("\n");
+	}
 
 	const lines = [
 		"# Workspace Cleanup Plan",
@@ -578,7 +647,7 @@ function renderCachedProfile(root: string): string[] {
 	return [];
 }
 
-function renderCmuxWorkspaceContext(url: string): string[] {
+function renderCmuxWorkspaceContext(url: string, helperCommand = "./bin/cmux-evidence"): string[] {
 	const workspaceId = process.env.CMUX_WORKSPACE_ID?.trim();
 	const surfaceId = process.env.CMUX_SURFACE_ID?.trim();
 	const socketPath = process.env.CMUX_SOCKET_PATH?.trim();
@@ -621,11 +690,11 @@ function renderCmuxWorkspaceContext(url: string): string[] {
 		"Use these only when UI state is relevant; this extension does not query CMUX on every turn.",
 		"",
 		"```bash",
-		"./bin/cmux-evidence preview-url",
-		"./bin/cmux-evidence browser-surfaces",
-		"./bin/cmux-evidence preview-title <surface-ref>",
-		"./bin/cmux-evidence preview-snapshot <surface-ref>",
-		"./bin/cmux-evidence preview-screenshot <surface-ref> /tmp/evidence-preview.png",
+		`${helperCommand} preview-url`,
+		`${helperCommand} browser-surfaces`,
+		`${helperCommand} preview-title <surface-ref>`,
+		`${helperCommand} preview-snapshot <surface-ref>`,
+		`${helperCommand} preview-screenshot <surface-ref> /tmp/evidence-preview.png`,
 		`cmux list-pane-surfaces ${workspaceFlag} --json`,
 		"```",
 	);
@@ -637,8 +706,12 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 
 	const evidenceConfig = safeReadJson(join(root, ".cmux", "evidence.json"));
 	const workspace = safeReadJson(join(root, ".cmux", "workspace.json"));
-	const sourceCatalog = buildSourceCatalog(root);
-	const plugins = inferEvidenceDatasourcePlugins(root);
+	const contentMode = isContentWorkspace(evidenceConfig, workspace);
+	const runtimeRoot = runtimeRootFor(root, evidenceConfig, workspace);
+	const shadowRuntimeRoot = stringValue(workspace?.shadowRuntimeRoot) || stringValue(evidenceConfig?.shadowRuntimeRoot);
+	const helperCommand = existsSync(join(runtimeRoot, "bin", "cmux-evidence")) ? join(runtimeRoot, "bin", "cmux-evidence") : "cmux-evidence";
+	const sourceCatalog = buildSourceCatalog(runtimeRoot);
+	const plugins = inferEvidenceDatasourcePlugins(runtimeRoot);
 
 	const title = stringValue(workspace?.title) || basename(root);
 	const slug = stringValue(workspace?.slug) || basename(root);
@@ -659,14 +732,23 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		`- Slug: ${slug}`,
 	];
 	if (branch) lines.push(`- Branch: ${branch}`);
-	lines.push(`- Worktree: ${root}`);
+	if (contentMode) {
+		lines.push("- Workspace mode: content-only");
+		lines.push(`- Workspace root: ${root}`);
+		lines.push(`- Runtime root: ${runtimeRoot} (runtime-managed; do not edit unless explicitly asked)`);
+		if (shadowRuntimeRoot) lines.push(`- Shadow runtime: ${shadowRuntimeRoot} (generated Evidence app; do not edit directly)`);
+		lines.push(`- Workspace helper: ${helperCommand}`);
+	} else {
+		lines.push(`- Worktree: ${root}`);
+		if (runtimeRoot !== root) lines.push(`- Runtime root: ${runtimeRoot}`);
+	}
 	if (page) lines.push(`- Primary page: ${page}`);
 	if (url) lines.push(`- Preview URL: ${url}`);
 	if (port !== undefined && port !== null && String(port).trim()) lines.push(`- Dev server port: ${String(port)}`);
 	if (process.env.CMUX_WORKSPACE_ID) lines.push(`- CMUX caller workspace: ${process.env.CMUX_WORKSPACE_ID}`);
 	if (process.env.CMUX_SURFACE_ID) lines.push(`- CMUX caller surface: ${process.env.CMUX_SURFACE_ID}`);
 
-	lines.push("", ...renderCmuxWorkspaceContext(url));
+	lines.push("", ...renderCmuxWorkspaceContext(url, helperCommand));
 
 	const intentionLines = renderIntention(workspace);
 	if (intentionLines.length) {
@@ -678,6 +760,7 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		lines.push(`- Evidence datasource plugins enabled by evidence.config.yaml: ${plugins.join(", ")}`);
 	}
 	lines.push("- Source details below are inferred from safe files matching sources/*/*.sql only.");
+	if (contentMode) lines.push("- In content-only workspaces, source SQL lives in the runtime root and is a read-only semantic reference unless the user explicitly asks to edit sources.");
 	lines.push("- Secrets and connection files such as .env* and **/connection.yaml are intentionally not read.");
 	lines.push("- Use this as a starting catalog; inspect files/queries when accuracy matters.");
 
@@ -685,7 +768,7 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		lines.push("", "### Source query catalog", "");
 		for (const item of sourceCatalog) {
 			lines.push(`- ${item.source}.${item.name}`);
-			lines.push(`  - File: ${item.file}`);
+			lines.push(`  - File: ${contentMode ? `runtime:${item.file}` : item.file}`);
 			lines.push(`  - Inferred columns: ${renderList(item.columns)}`);
 			lines.push(`  - Likely time fields: ${renderList(item.timeFields)}`);
 			lines.push(`  - Likely measures: ${renderList(item.measures)}`);

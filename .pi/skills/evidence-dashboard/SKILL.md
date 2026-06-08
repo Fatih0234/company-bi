@@ -19,30 +19,39 @@ Use this skill when working in the company-bi Evidence dashboard workspace.
 
 ## Workspace model
 
-One analysis usually maps to:
+Always read `.cmux/workspace.json` and prefer its `workspaceMode`, `workspaceRoot`, `runtimeRoot`, `shadowRuntimeRoot`, `page`, and `pages` fields over hard-coded path conventions.
+
+The default modern model is **content-only**:
+
+- `workspaceRoot` is the user/agent editing surface.
+- `shadowRuntimeRoot` is a generated Evidence app used by the dev server; do not edit it directly.
+- `runtimeRoot` owns source connectors, scripts, package files, Pi extensions, and dependencies; treat it as runtime-managed unless the user explicitly asks for app/source changes.
+- The content workspace usually contains `pages/index.md`, `pages/draft.md`, `pages/report.md`, plus `queries/`, `reports/`, and `data/`.
+- There may be no Git branch or Git worktree for the content workspace.
+
+Legacy analyses may still use the older Git-worktree model:
 
 - one Git branch
 - one Git worktree
-- one Evidence directory (multiple pages)
-- one Evidence dev server port
-- one CMUX workspace
-- one browser preview pane
-- one Pi agent pane
+- one Evidence directory under `pages/analysis/<slug>/`
 
 ### Workspace page convention
 
-Each analysis workspace uses a directory under `pages/analysis/<slug>/`:
+For content-only workspaces, use the page paths from `.cmux/workspace.json`, usually:
 
-- **Brief page** (`index.md`) — The landing page. Contains the workspace intention, goal, and a `Workspace Pages` map. Always keep this up to date.
-- **Draft page** (`draft.md`) — The sandbox. Put messy queries, experiments, and work-in-progress here. No quality standards.
-- **Report page** (`report.md`) — The polished dashboard. Move validated findings here. Must be clean, readable, and production-quality.
-- **Focused deep-dives** (`[topic].md`) — Optional focused pages for specific angles (e.g., `seasonal-trends.md`).
+- **Brief page** (`pages/index.md`) — The landing page. Contains the workspace intention, goal, and a `Workspace Pages` map. Always keep this up to date.
+- **Draft page** (`pages/draft.md`) — The sandbox. Put messy queries, experiments, and work-in-progress here. No quality standards.
+- **Report page** (`pages/report.md`) — The polished dashboard. Move validated findings here. Must be clean, readable, and production-quality.
+- **Analysis SQL** (`queries/*.sql`) — Reusable analysis-owned SQL files for this workspace. Use these when SQL should be preserved, reused, reviewed, or eventually published with the analysis.
+- **Focused deep-dives** (`pages/[topic].md` or another path recorded in metadata) — Optional focused pages for specific angles.
+
+For legacy Git-worktree analyses, the same logical pages may live under `pages/analysis/<slug>/`.
 
 **Rules:**
-- When exploring a new idea or testing a query, work in the **Draft** page.
-- When a finding is validated and ready for the user, move it to the **Report** page.
+- When exploring a new idea or testing a query, work in the **Draft** page from metadata.
+- When a finding is validated and ready for the user, move it to the **Report** page from metadata.
 - Update the Brief page's `Workspace Pages` table when you create new pages.
-- Create new pages in the workspace directory for focused deep-dives.
+- Create new pages in the content workspace unless metadata indicates a legacy analysis directory.
 
 ## Default edit policy
 
@@ -106,21 +115,21 @@ A strong first dashboard usually includes:
 
 When the user asks whether the dashboard looks correct, or after substantial edits:
 
-1. Find the active preview URL from the injected dynamic context, `.cmux/workspace.json`, or `./bin/cmux-evidence preview-url`.
+1. Find the active preview URL from the injected dynamic context, `.cmux/workspace.json`, or `<workspace-helper> preview-url`.
 2. Use CMUX browser automation if a browser surface is available.
 3. Snapshot or evaluate the page.
 4. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
 5. Report what was visually confirmed and what still requires human judgment.
 
-Use the project helpers first:
+Use the workspace helper shown in dynamic context first. In content-only workspaces this is usually an absolute runtime helper path because `./bin/cmux-evidence` does not exist in the content workspace.
 
 ```bash
-./bin/cmux-evidence preview-url
-./bin/cmux-evidence preview-open
-./bin/cmux-evidence browser-surfaces
-./bin/cmux-evidence preview-title <surface-ref>
-./bin/cmux-evidence preview-snapshot <surface-ref>
-./bin/cmux-evidence preview-screenshot <surface-ref> /tmp/evidence-preview.png
+<workspace-helper> preview-url
+<workspace-helper> preview-open
+<workspace-helper> browser-surfaces
+<workspace-helper> preview-title <surface-ref>
+<workspace-helper> preview-snapshot <surface-ref>
+<workspace-helper> preview-screenshot <surface-ref> /tmp/evidence-preview.png
 ```
 
 When no surface ref is supplied, the preview helpers may auto-detect a single matching browser surface. If multiple browser surfaces exist, pass the explicit `surface:N` ref.
@@ -150,14 +159,14 @@ Use the project-local Pi commands when they help orient the user:
 Before publishing or declaring completion:
 
 ```bash
-./bin/cmux-evidence preview-url
-./bin/cmux-evidence browser-surfaces
-./bin/cmux-evidence preview-snapshot <surface-ref>
-./bin/cmux-evidence validate
-./bin/cmux-evidence diff
+<workspace-helper> preview-url
+<workspace-helper> browser-surfaces
+<workspace-helper> preview-snapshot <surface-ref>
+<workspace-helper> validate
+<workspace-helper> diff
 ```
 
-If those commands do not exist yet, use the closest project scripts and explain the gap.
+Use the helper path shown in dynamic context. If no helper is shown, use the closest project scripts and explain the gap.
 
 ## Communication style
 

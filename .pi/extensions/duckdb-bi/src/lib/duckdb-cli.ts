@@ -98,7 +98,7 @@ export async function runDuckDbCli(
 
   return await new Promise<DuckDbCliResult>((resolve, reject) => {
     const child = spawn("duckdb", options.args, {
-      cwd: config.projectRoot,
+      cwd: config.duckdbCwd ?? config.projectRoot,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
       env: process.env,

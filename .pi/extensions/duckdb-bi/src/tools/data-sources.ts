@@ -36,7 +36,7 @@ export function registerDataSourcesTool(pi: ExtensionAPI, baseConfig: DuckDbBiCo
         runtime_dir: toProjectRelative(config, config.runtimeDir),
         evidence_sources: evidenceSources.map(evidenceSourceToPublic),
         databases: files.filter((file) => file.type === "duckdb").map((file) => ({ name: file.alias, path: file.path, readonly: true })),
-        files: files.filter((file) => file.type !== "duckdb").map(({ path, type, size_bytes, alias }) => ({ path, type, size_bytes, alias, source_type: "file", recommended_for_dashboard: false })),
+        files: files.filter((file) => file.type !== "duckdb").map(({ path, type, size_bytes, alias, root }) => ({ path, type, size_bytes, alias, root, source_type: "file", recommended_for_dashboard: false })),
         exports,
         reports,
         audit_log_path: toProjectRelative(config, config.auditLogPath),

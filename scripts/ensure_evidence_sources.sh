@@ -16,6 +16,26 @@ fi
 find_main_checkout() {
   local candidate
 
+  # Content-only layout: shadow runtime stores a pointer to the source/runtime checkout.
+  candidate="$({ python3 - <<'PY'
+import json
+from pathlib import Path
+for path in [Path('.cmux/workspace.json'), Path('.cmux/evidence.json')]:
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        continue
+    runtime_root = data.get('runtimeRoot')
+    if runtime_root:
+        print(runtime_root)
+        break
+PY
+  } 2>/dev/null || true)"
+  if [[ -n "$candidate" && -f "$candidate/.cmux/evidence.json" && -f "$candidate/$MANIFEST" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
   # Normal layout: main checkout/.workspaces/<analysis-worktree>
   for candidate in "../.." ".."; do
     if [[ -f "$candidate/.cmux/evidence.json" && -f "$candidate/$MANIFEST" ]]; then

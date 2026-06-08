@@ -1,13 +1,14 @@
 # Company BI
 
-Company BI is an Evidence dashboard project with a CMUX/Pi workspace workflow for creating reviewable analysis dashboards in isolated Git worktrees.
+Company BI is an Evidence dashboard project with a CMUX/Pi workspace workflow for creating reviewable analysis dashboards in clean content-only workspaces backed by a hidden Evidence runtime.
 
 ## What this repo provides
 
 - Evidence app for local BI dashboards
 - `cmux-evidence` helper CLI for CMUX workspace launch and analysis lifecycle
-- Project-local analysis worktrees under `.workspaces/`
-- Per-analysis metadata, Pi context, browser preview helpers, validation, diff, and publish commands
+- Clean per-analysis workspaces with `pages/`, `queries/`, `reports/`, and `data/`
+- Hidden generated Evidence runtimes for preview/build
+- Per-analysis metadata, Pi context, browser preview helpers, validation, content diff, and publish commands
 - CMUX Command Palette actions for common Evidence workflows
 
 ## Prerequisites
@@ -50,24 +51,34 @@ This opens a CMUX workspace with an agent pane, Evidence preview, and dev server
 ./bin/cmux-evidence new "Revenue Quality by Segment"
 ```
 
-This creates a Git worktree and branch:
+This creates a clean content workspace and a hidden Evidence runtime:
 
 ```text
-.workspaces/revenue-quality-by-segment
-analysis/revenue-quality-by-segment
+~/.local/share/lumen-bi/workspaces/company-bi/revenue-quality-by-segment
+~/.local/share/lumen-bi/runtime/company-bi/revenue-quality-by-segment
 ```
 
 Each generated workspace gets its own:
 
-- Evidence page in `pages/analysis/<slug>.md`
+- `pages/index.md` for the brief/workspace map
+- `pages/draft.md` for exploration
+- `pages/report.md` for the polished publishable report
+- `queries/` for reusable analysis SQL
+- `reports/` and `data/` for optional local materials
 - `.cmux/workspace.json`
-- `.cmux/pi-context.md`
-- project-local Evidence dashboard Pi skill
 - dedicated dev server port and preview URL
+
+After creating a workspace:
+
+1. Explore ideas and rough queries in `pages/draft.md`.
+2. Keep reusable SQL in `queries/`.
+3. Move validated findings to `pages/report.md`.
+4. Use `./bin/cmux-evidence validate` and `./bin/cmux-evidence diff` before publishing.
+5. Publish only when the polished report is ready to share.
 
 ## Common commands
 
-From the root project or an analysis worktree:
+From the root project or a generated analysis workspace:
 
 ```bash
 ./bin/cmux-evidence list
@@ -90,21 +101,23 @@ Browser preview helpers, when running inside CMUX:
 
 ## Publish an analysis
 
-Inside a generated analysis worktree:
+Inside a generated analysis workspace:
 
 ```bash
 ./bin/cmux-evidence publish
 ```
 
-Publish is intentionally conservative. It:
+Publish is intentionally conservative. In content-only workspaces it:
 
-1. verifies the directory is an analysis worktree
-2. runs validation
-3. shows the diff stat
-4. requires typing exactly `publish`
-5. commits changes
-6. pushes the analysis branch
-7. opens a GitHub PR when `gh` is available
+1. runs validation from the hidden Evidence runtime
+2. shows a content diff against the initial or last-published snapshot
+3. requires typing exactly `publish`
+4. publishes the polished report as `/reports/<slug>/`
+5. includes `queries/**`
+6. keeps draft notes, local data, DuckDB scratch files, and runtime files private by default
+7. prepares a review branch/PR when Git/GitHub are configured
+
+Legacy Git-worktree analyses still use the older commit/push/PR publish flow.
 
 ## Local generated state
 

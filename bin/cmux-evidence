@@ -7,6 +7,8 @@ import fnmatch
 import json
 import os
 import re
+import difflib
+import hashlib
 import shutil
 import socket
 import subprocess
@@ -21,6 +23,8 @@ DEFAULT_PORT = 3000
 DEFAULT_ANALYSIS_BASE_PORT = 3100
 PORT_RANGE_SIZE = 100
 DEFAULT_REGISTRY_PATH = ".cmux/registry.json"
+DEFAULT_WORKSPACE_MODE = "git-worktree"
+CONTENT_WORKSPACE_MODE = "content-only"
 
 _STYLE_CODES = {
     "reset": "\033[0m",
@@ -119,8 +123,24 @@ def registry_path(root: Path, config: dict[str, Any]) -> Path:
     return expand_path(raw, base=root)
 
 
+def workspace_mode(config: dict[str, Any]) -> str:
+    mode = str(config.get("workspaceMode") or DEFAULT_WORKSPACE_MODE).strip()
+    return mode or DEFAULT_WORKSPACE_MODE
+
+
 def workspace_dir(root: Path, config: dict[str, Any]) -> Path:
     raw = str(config.get("workspaceDir") or ".workspaces")
+    return expand_path(raw, base=root)
+
+
+def runtime_root(root: Path, config: dict[str, Any]) -> Path:
+    raw = str(config.get("runtimeRoot") or root)
+    return expand_path(raw, base=root)
+
+
+def runtime_dir(root: Path, config: dict[str, Any]) -> Path:
+    pid = project_id(root, config)
+    raw = str(config.get("runtimeDir") or f"~/.local/share/lumen-bi/runtime/{pid}")
     return expand_path(raw, base=root)
 
 
@@ -192,10 +212,20 @@ def load_project(target: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def load_current_project() -> tuple[Path, dict[str, Any]]:
-    root = git_root(Path.cwd().resolve())
-    if root is None:
-        raise ValueError("Not inside a Git repository")
-    return load_project(root)
+    cwd = Path.cwd().resolve()
+    root = git_root(cwd)
+    if root is not None:
+        return load_project(root)
+
+    local_marker = cwd / ".cmux" / "evidence.json"
+    if local_marker.exists():
+        local_config = load_config(local_marker)
+        configured_runtime_root = local_config.get("runtimeRoot")
+        if configured_runtime_root:
+            return load_project(expand_path(str(configured_runtime_root), base=cwd))
+        return cwd, local_config
+
+    raise ValueError("Not inside a Git repository or Evidence CMUX workspace")
 
 
 def slugify(value: str) -> str:
@@ -255,8 +285,27 @@ def used_workspace_ports(workspaces_root: Path) -> set[int]:
     return ports
 
 
-def choose_port(base_port: int, workspaces_root: Path) -> int:
-    used_ports = used_workspace_ports(workspaces_root)
+def registry_workspace_ports(registry_file: Path, project_id_value: str) -> set[int]:
+    ports: set[int] = set()
+    try:
+        registry = load_registry(registry_file)
+    except ValueError:
+        return ports
+    workspaces = registry.get("projects", {}).get(project_id_value, {}).get("workspaces", {})
+    if not isinstance(workspaces, dict):
+        return ports
+    for row in workspaces.values():
+        if not isinstance(row, dict):
+            continue
+        try:
+            ports.add(int(row["port"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return ports
+
+
+def choose_port(base_port: int, workspaces_root: Path, *, extra_used_ports: set[int] | None = None) -> int:
+    used_ports = used_workspace_ports(workspaces_root) | (extra_used_ports or set())
     for port in range(base_port, base_port + PORT_RANGE_SIZE):
         if port not in used_ports and port_is_free(port):
             return port
@@ -271,6 +320,8 @@ def build_layout(
     url: str,
     agent_command: str,
     dev_command: str,
+    agent_cwd: Path | None = None,
+    dev_cwd: Path | None = None,
 ) -> dict[str, Any]:
     # Schema matches `cmux new-workspace --layout` / cmux.json layout definitions.
     return {
@@ -284,7 +335,7 @@ def build_layout(
                             "type": "terminal",
                             "title": "Pi Agent",
                             "command": agent_command,
-                            "cwd": str(target),
+                            "cwd": str(agent_cwd or target),
                             "focus": True,
                         }
                     ]
@@ -312,7 +363,7 @@ def build_layout(
                                     "type": "terminal",
                                     "title": "Evidence Dev",
                                     "command": dev_command,
-                                    "cwd": str(target),
+                                    "cwd": str(dev_cwd or target),
                                 }
                             ]
                         }
@@ -333,12 +384,21 @@ def open_workspace(target_arg: str | Path = ".", *, print_layout: bool = False) 
     url = str(config.get("url") or f"http://localhost:{port}")
     agent_command = str(config.get("agentCommand") or "pi")
     dev_command = str(config.get("devCommand") or "npm run dev")
+    metadata = load_workspace_metadata(target) or {}
+    try:
+        repaired_shadow_root = ensure_content_shadow_runtime(target, config, metadata)
+    except ValueError as exc:
+        return error(str(exc))
+    agent_cwd = Path(str(metadata.get("workspaceRoot") or target)).expanduser().resolve()
+    dev_cwd = repaired_shadow_root if is_content_workspace(config, metadata) else Path(str(metadata.get("shadowRuntimeRoot") or target)).expanduser().resolve()
 
     layout = build_layout(
         target=target,
         url=url,
         agent_command=agent_command,
         dev_command=dev_command,
+        agent_cwd=agent_cwd,
+        dev_cwd=dev_cwd,
     )
 
     if print_layout:
@@ -460,7 +520,30 @@ title: {title_yaml}
 
 # {title}
 
-This is an agent-created Evidence analysis workspace. The brief below comes from the onboarding conversation and should stay visible so the user and Pi can stay aligned while the dashboard evolves.
+This is your analysis workspace home page. Use it to keep the goal, working files, and publish plan clear while Pi helps build the dashboard.
+
+## Start Here
+
+1. Explore ideas and rough queries in `pages/draft.md`.
+2. Save reusable analysis SQL in `queries/`.
+3. Move validated findings into `pages/report.md`.
+4. Preview the workspace at the URL shown by `cmux-evidence current` or `cmux-evidence preview-url`.
+5. Publish only when `pages/report.md` is ready to share.
+
+## Files in this workspace
+
+| Path | Purpose | Published by default? |
+|------|---------|-----------------------|
+| `pages/index.md` | This brief and workspace map | No |
+| `pages/draft.md` | Private exploration, scratch queries, working notes | No |
+| `pages/report.md` | Polished report/dashboard | Yes |
+| `queries/` | Reusable analysis-owned SQL | Yes |
+| `data/` | Local input files for this analysis | No |
+| `reports/` | Optional local or curated report materials | No |
+
+## Publish & privacy
+
+Publishing shares `pages/report.md` and `queries/**` by default. Draft notes, local data, DuckDB scratch files, and runtime files stay private unless you explicitly choose otherwise.
 
 ## Workspace Brief
 
@@ -504,16 +587,18 @@ Pi should update this checklist as it turns the brief into an Evidence dashboard
 
 ## Workspace Pages
 
-| Page | Purpose | Status |
-|------|---------|--------|
-| Draft | Exploration, hypothesis testing, messy queries | 🔄 Active |
-| Report | Polished dashboard with validated findings | 📝 Not started |
+| Page | Path | Purpose | Status |
+|------|------|---------|--------|
+| Brief | `pages/index.md` | This workspace map and intention | ✅ Active |
+| Draft | `pages/draft.md` | Exploration, hypothesis testing, messy queries | 🔄 Active |
+| Report | `pages/report.md` | Polished dashboard with validated findings | 📝 Not started |
 
 The **Draft** page is the sandbox. Put experiments, raw queries, and work-in-progress there.
+Use `queries/` for reusable analysis-owned SQL files that belong with this workspace.
 The **Report** page is the polished dashboard. Move validated findings there.
 This **Brief** page (this page) is the workspace map and intention.
 
-## Notes for Pi
+## Collaboration notes
 
 - Keep the Workspace Brief aligned with `.cmux/workspace.json` when the user's goal changes.
 - Prefer Evidence-native Markdown, SQL, KPI cards, charts, filters, and tables.
@@ -534,9 +619,20 @@ title: {title_yaml}
 
 # Draft: {title}
 
-This is the exploration sandbox for this analysis. Put messy queries, experiments, and work-in-progress here.
+This is the private exploration sandbox for this analysis. Use it for messy queries, experiments, working notes, and candidate findings before moving polished content to `pages/report.md`.
 
-## Exploration
+## Questions to explore
+
+- What needs to be true for this dashboard to answer the brief?
+- Which metrics, trends, or segments should Pi investigate first?
+
+## Working notes
+
+_Add rough observations here as you explore._
+
+## Scratch query
+
+Replace this placeholder with real exploration. Put reusable SQL that should be preserved in `queries/`.
 
 ```sql draft_query
 select 1 as example_metric
@@ -544,17 +640,78 @@ select 1 as example_metric
 
 <DataTable data={{draft_query}} />
 
-## Notes
+## Candidate findings
 
-- This page is for exploration and experimentation.
-- Move validated findings to the Report page.
-- Update the Brief page when you create new pages.
+- Move validated findings to `pages/report.md`.
+- Keep reusable analysis SQL in `queries/`.
+- Update `pages/index.md` when you create new pages or change the analysis direction.
 """
 
 
 def write_draft_page(path: Path, title: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_draft_page(title))
+
+
+def render_report_page(title: str) -> str:
+    title_yaml = json.dumps(title)
+    return f"""---
+title: {title_yaml}
+---
+
+# Report: {title}
+
+This is the polished report for validated findings. By default, publishing shares this page at `/reports/<workspace-slug>/` together with `queries/**`. Draft notes, local data, DuckDB scratch files, and runtime files stay private.
+
+## Executive Summary
+
+_To be completed._
+
+## Key Metrics
+
+_To be completed._
+
+## Trend
+
+_To be completed._
+
+## Breakdown
+
+_To be completed._
+
+## Assumptions and Caveats
+
+_To be completed._
+
+## Next Steps
+
+_To be completed._
+"""
+
+
+def write_report_page(path: Path, title: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_report_page(title))
+
+
+def symlink_or_copy(source: Path, target: Path) -> None:
+    if target.exists() or target.is_symlink():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.symlink_to(source, target_is_directory=source.is_dir())
+        return
+    except OSError:
+        pass
+    if source.is_dir():
+        shutil.copytree(source, target, dirs_exist_ok=True)
+    elif source.exists():
+        shutil.copy2(source, target)
+
+
+def write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def string_list_config(config: dict[str, Any], key: str, default: list[str]) -> list[str]:
@@ -659,6 +816,7 @@ def render_pi_context(
     config: dict[str, Any],
     metadata: dict[str, Any] | None = None,
 ) -> str:
+    metadata = metadata or {}
     allowed = string_list_config(config, "allowedAgentPaths", ["pages/**", "queries/**"])
     ask = string_list_config(
         config,
@@ -670,12 +828,30 @@ def render_pi_context(
         "blockedAgentPaths",
         [".env*", "**/connection.yaml", ".github/**"],
     )
+    content_mode = is_content_workspace(config, metadata)
+    runtime_root_value = Path(str(metadata.get("runtimeRoot") or config.get("runtimeRoot") or worktree_path)).expanduser().resolve()
+    shadow_root_value = metadata.get("shadowRuntimeRoot") or config.get("shadowRuntimeRoot")
+    helper_command = runtime_root_value / "bin" / "cmux-evidence"
 
     def bullets(values: list[str]) -> str:
         return "\n".join(f"- {value}" for value in values)
 
-    intention_context = render_intention_context(metadata or {})
+    intention_context = render_intention_context(metadata)
     intention_block = f"\n{intention_context}\n" if intention_context else ""
+    branch_line = f"- Branch: {branch}\n" if branch else ""
+    if content_mode:
+        root_lines = [
+            "- Workspace mode: content-only",
+            f"- Workspace root: {worktree_path}",
+            f"- Runtime root: {runtime_root_value} (runtime-managed; do not edit unless explicitly asked)",
+        ]
+        if shadow_root_value:
+            root_lines.append(f"- Shadow runtime: {Path(str(shadow_root_value)).expanduser().resolve()} (generated Evidence app; do not edit directly)")
+        root_block = "\n".join(root_lines)
+        source_guidance = "Runtime source files are read-only references for analysis context. Prefer editing pages, queries, reports, data, and approved workspace metadata."
+    else:
+        root_block = f"- Worktree: {worktree_path}"
+        source_guidance = "Follow the safe edit policy below for source, component, package, and workspace files."
 
     return f"""# Evidence Dashboard Workspace Context
 
@@ -686,19 +862,21 @@ You are helping build an Evidence dashboard inside a CMUX workspace.
 - Project: {project_id_value}
 - Title: {title}
 - Slug: {slug}
-- Branch: {branch}
-- Worktree: {worktree_path}
+{branch_line}{root_block}
 - Primary page: {page}
 - Preview URL: {url}
 - Dev server port: {port}
+- Workspace helper: {helper_command}
 {intention_block}
 ## Main task
 
 Help the user create and refine the Evidence dashboard for this analysis.
-The workspace has three pages: Brief (index.md), Draft (draft.md), and Report (report.md).
+The workspace has three pages: Brief (index.md), Draft (draft.md), and Report (report.md), plus `queries/` for reusable analysis-owned SQL.
 Start with the Draft page for exploration unless the user asks for a different target.
 
 ## Safe edit policy
+
+{source_guidance}
 
 Allowed by default:
 
@@ -722,6 +900,7 @@ When making dashboard changes:
 4. Fix visible Evidence errors before saying the task is complete.
 5. Summarize changed files and remaining questions.
 
+Use `{helper_command}` for workspace commands such as `preview-url`, `status`, and `validate`.
 Use CMUX status/progress/notifications for long-running work when available.
 """
 
@@ -776,9 +955,301 @@ def prompt_line(label: str, *, default: str = "") -> str:
     return value or default
 
 
+def workspace_minimal_evidence_config(
+    *,
+    root_config: dict[str, Any],
+    pid: str,
+    port: int,
+    url: str,
+    workspace_root: Path,
+    shadow_root: Path,
+    root: Path,
+) -> dict[str, Any]:
+    config = dict(root_config)
+    config.update(
+        {
+            "type": "evidence",
+            "projectId": pid,
+            "workspaceMode": CONTENT_WORKSPACE_MODE,
+            "port": port,
+            "url": url,
+            "runtimeRoot": str(root),
+            "shadowRuntimeRoot": str(shadow_root),
+            "workspaceRoot": str(workspace_root),
+            "registryPath": str(registry_path(root, root_config)),
+            "agentCommand": str(root / "bin" / "lumen-pi"),
+            "devCommand": f"npm run dev -- --port {port}",
+            "validateCommand": "npm run build",
+        }
+    )
+    return config
+
+
+def shadow_evidence_config(
+    *,
+    root_config: dict[str, Any],
+    pid: str,
+    port: int,
+    url: str,
+    workspace_root: Path,
+    shadow_root: Path,
+    root: Path,
+) -> dict[str, Any]:
+    config = workspace_minimal_evidence_config(
+        root_config=root_config,
+        pid=pid,
+        port=port,
+        url=url,
+        workspace_root=workspace_root,
+        shadow_root=shadow_root,
+        root=root,
+    )
+    config["agentCommand"] = str(root / "bin" / "lumen-pi")
+    config["workspaceDir"] = str(workspace_root.parent)
+    return config
+
+
+def ensure_shadow_runtime(
+    *,
+    root: Path,
+    config: dict[str, Any],
+    workspace_root: Path,
+    shadow_root: Path,
+    metadata: dict[str, Any],
+) -> None:
+    shadow_root.mkdir(parents=True, exist_ok=True)
+    (shadow_root / ".cmux").mkdir(parents=True, exist_ok=True)
+
+    for rel in ["evidence.config.yaml", "package.json", "package-lock.json"]:
+        source = root / rel
+        if source.exists():
+            symlink_or_copy(source, shadow_root / rel)
+
+    for rel in ["sources", "scripts", "bin", ".pi", "data"]:
+        source = root / rel
+        if source.exists():
+            symlink_or_copy(source, shadow_root / rel)
+
+    # Reuse the main runtime's generated Evidence source/cache data when present.
+    # Without this, content-only shadows that live outside the Git checkout cannot
+    # be bootstrapped by scripts/ensure_evidence_sources.sh and may regenerate
+    # expensive datasource manifests on every first preview.
+    evidence_cache = root / ".evidence" / "template" / "static" / "data"
+    if evidence_cache.exists():
+        symlink_or_copy(evidence_cache, shadow_root / ".evidence" / "template" / "static" / "data")
+
+    node_modules = root / "node_modules"
+    if node_modules.exists():
+        symlink_or_copy(node_modules, shadow_root / "node_modules")
+
+    for rel in ["pages", "queries", "reports"]:
+        content_dir = workspace_root / rel
+        content_dir.mkdir(parents=True, exist_ok=True)
+        runtime_link = shadow_root / rel
+        if runtime_link.exists() or runtime_link.is_symlink():
+            if runtime_link.is_symlink() and runtime_link.resolve() != content_dir.resolve():
+                runtime_link.unlink()
+        if not runtime_link.exists():
+            symlink_or_copy(content_dir, runtime_link)
+
+    workspace_data = workspace_root / "data"
+    if workspace_data.exists():
+        symlink_or_copy(workspace_data, shadow_root / "workspace-data")
+
+    # Keep workspace metadata visible to runtime tools from the shadow app.
+    workspace_meta = shadow_root / ".cmux" / "workspace.json"
+    if workspace_meta.exists() or workspace_meta.is_symlink():
+        if workspace_meta.is_symlink():
+            workspace_meta.unlink()
+    if not workspace_meta.exists():
+        symlink_or_copy(workspace_root / ".cmux" / "workspace.json", workspace_meta)
+
+    evidence_config = shadow_evidence_config(
+        root_config=config,
+        pid=str(metadata.get("projectId") or project_id(root, config)),
+        port=int(metadata.get("port") or config.get("port") or DEFAULT_PORT),
+        url=str(metadata.get("url") or config.get("url") or ""),
+        workspace_root=workspace_root,
+        shadow_root=shadow_root,
+        root=root,
+    )
+    write_json(shadow_root / ".cmux" / "evidence.json", evidence_config)
+
+
+def is_content_workspace(config: dict[str, Any], metadata: dict[str, Any] | None = None) -> bool:
+    metadata = metadata or {}
+    if str(metadata.get("kind") or "").strip() == "lumen-analysis-workspace":
+        return True
+    mode = str(metadata.get("workspaceMode") or config.get("workspaceMode") or "").strip()
+    has_split_roots = bool(
+        metadata.get("workspaceRoot")
+        or metadata.get("shadowRuntimeRoot")
+        or config.get("workspaceRoot")
+        or config.get("shadowRuntimeRoot")
+    )
+    return mode == CONTENT_WORKSPACE_MODE and has_split_roots
+
+
+def ensure_content_shadow_runtime(target: Path, config: dict[str, Any], metadata: dict[str, Any]) -> Path:
+    if not is_content_workspace(config, metadata):
+        return target
+
+    workspace_root = Path(str(metadata.get("workspaceRoot") or target)).expanduser().resolve()
+    shadow_root_value = metadata.get("shadowRuntimeRoot") or config.get("shadowRuntimeRoot")
+    runtime_root_value = metadata.get("runtimeRoot") or config.get("runtimeRoot")
+    if not shadow_root_value:
+        raise ValueError("Content-only workspace metadata is missing shadowRuntimeRoot")
+    if not runtime_root_value:
+        raise ValueError("Content-only workspace metadata is missing runtimeRoot")
+
+    shadow_root = Path(str(shadow_root_value)).expanduser().resolve()
+    root = Path(str(runtime_root_value)).expanduser().resolve()
+    try:
+        root, root_config = load_project(root)
+        ensure_shadow_runtime(
+            root=root,
+            config=root_config,
+            workspace_root=workspace_root,
+            shadow_root=shadow_root,
+            metadata=metadata,
+        )
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            "Shadow runtime is missing or could not be regenerated.\n"
+            f"Workspace: {workspace_root}\n"
+            f"Runtime: {shadow_root}\n"
+            f"Reason: {exc}"
+        ) from exc
+    return shadow_root
+
+
+def new_content_analysis(title: str, *, print_layout: bool = False, open_after_create: bool = True) -> int:
+    title = title.strip()
+    cwd = Path.cwd().resolve()
+    root = git_root(cwd)
+    if root is None:
+        return error("Not inside a Git repository")
+    try:
+        root, config = load_project(root)
+    except ValueError as exc:
+        return error(str(exc))
+    if cwd != root:
+        return error(f"Run `cmux-evidence new` from the main Evidence project root: {root}")
+    if not title:
+        if not sys.stdin.isatty():
+            return error('Usage: cmux-evidence new "analysis name"')
+        print("New Evidence analysis workspace")
+        title = prompt_line("Analysis title")
+        if not title:
+            return error("Analysis title is required")
+
+    pid = project_id(root, config)
+    workspaces_root = workspace_dir(root, config)
+    if str(config.get("workspaceDir") or ".workspaces") == ".workspaces":
+        workspaces_root = expand_path(f"~/.local/share/lumen-bi/workspaces/{pid}")
+    shadows_root = runtime_dir(root, config)
+    registry_file = registry_path(root, config)
+    workspaces_root.mkdir(parents=True, exist_ok=True)
+    shadows_root.mkdir(parents=True, exist_ok=True)
+
+    slug = unique_slug(slugify(title), root, workspaces_root)
+    workspace_root = workspaces_root / slug
+    shadow_root = shadows_root / slug
+    port = choose_port(
+        int(config.get("analysisBasePort", DEFAULT_ANALYSIS_BASE_PORT)),
+        workspaces_root,
+        extra_used_ports=registry_workspace_ports(registry_file, pid),
+    )
+    url = f"http://localhost:{port}"
+    created_at = now_iso()
+    page_rel = Path("pages") / "index.md"
+    draft_rel = Path("pages") / "draft.md"
+    report_rel = Path("pages") / "report.md"
+    intention: dict[str, Any] = {
+        "goal": "",
+        "questions": [],
+        "stakeholders": [],
+        "successCriteria": [],
+        "dashboardOptions": [],
+        "assumptions": [],
+        "clarifications": [],
+        "openQuestions": [],
+    }
+    metadata: dict[str, Any] = {
+        "kind": "lumen-analysis-workspace",
+        "workspaceMode": CONTENT_WORKSPACE_MODE,
+        "projectId": pid,
+        "title": title,
+        "slug": slug,
+        "path": str(workspace_root),
+        "workspaceRoot": str(workspace_root),
+        "shadowRuntimeRoot": str(shadow_root),
+        "runtimeRoot": str(root),
+        "page": str(page_rel),
+        "pages": {"brief": str(page_rel), "draft": str(draft_rel), "report": str(report_rel)},
+        "port": port,
+        "url": url,
+        "status": "draft",
+        "intention": intention,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+    }
+
+    try:
+        workspace_root.mkdir(parents=True, exist_ok=False)
+        write_brief_page(workspace_root / page_rel, title, metadata)
+        write_draft_page(workspace_root / draft_rel, title)
+        write_report_page(workspace_root / report_rel, title)
+        (workspace_root / "queries").mkdir(parents=True, exist_ok=True)
+        (workspace_root / "data").mkdir(parents=True, exist_ok=True)
+        (workspace_root / "reports").mkdir(parents=True, exist_ok=True)
+        write_json(workspace_root / ".cmux" / "workspace.json", metadata)
+        workspace_config = workspace_minimal_evidence_config(
+            root_config=config, pid=pid, port=port, url=url, workspace_root=workspace_root, shadow_root=shadow_root, root=root
+        )
+        write_json(workspace_root / ".cmux" / "evidence.json", workspace_config)
+        write_pi_context(workspace_root, metadata, workspace_config)
+        write_content_snapshot(workspace_root, workspace_config, "initial")
+        ensure_shadow_runtime(root=root, config=config, workspace_root=workspace_root, shadow_root=shadow_root, metadata=metadata)
+        upsert_workspace_registry(registry_file=registry_file, project_id_value=pid, project_root=root, workspace=metadata)
+    except (OSError, ValueError) as exc:
+        return error(f"Failed to create content-only analysis workspace: {exc}")
+
+    print(f"Created analysis workspace: {title}")
+    print()
+    print(f"Slug:      {slug}")
+    print(f"Workspace: {workspace_root}")
+    print(f"Preview:   {url}")
+    print()
+    print("Start here:")
+    print("  1. Explore in pages/draft.md")
+    print("  2. Keep reusable SQL in queries/")
+    print("  3. Move validated findings to pages/report.md")
+    print()
+    print(f"Open later: {root / 'bin' / 'cmux-evidence'} open {slug}")
+    print()
+    print("Publish shares pages/report.md and queries/** by default.")
+    print("Draft notes, local data, DuckDB scratch files, and runtime files stay private.")
+    print()
+    if not open_after_create:
+        print("CMUX open skipped (--no-open).")
+        return 0
+    print("Opening CMUX...")
+    return open_workspace(workspace_root, print_layout=print_layout)
+
 
 def new_analysis(title: str, *, print_layout: bool = False, open_after_create: bool = True) -> int:
     title = title.strip()
+
+    cwd = Path.cwd().resolve()
+    root_for_mode = git_root(cwd)
+    if root_for_mode is not None:
+        try:
+            _root_for_mode, _config_for_mode = load_project(root_for_mode)
+            if workspace_mode(_config_for_mode) == CONTENT_WORKSPACE_MODE:
+                return new_content_analysis(title, print_layout=print_layout, open_after_create=open_after_create)
+        except ValueError:
+            pass
 
     cwd = Path.cwd().resolve()
     root = git_root(cwd)
@@ -940,6 +1411,12 @@ def new_analysis(title: str, *, print_layout: bool = False, open_after_create: b
     return open_workspace(worktree_path, print_layout=print_layout)
 
 
+def metadata_is_content_only(metadata: dict[str, Any]) -> bool:
+    if str(metadata.get("kind") or "").strip() == "lumen-analysis-workspace":
+        return True
+    return str(metadata.get("workspaceMode") or "").strip() == CONTENT_WORKSPACE_MODE
+
+
 def list_analyses() -> int:
     try:
         root, config = load_current_project()
@@ -956,14 +1433,19 @@ def list_analyses() -> int:
     rows = sorted(workspaces.values(), key=lambda row: str(row.get("slug", "")))
     print(f"Analyses for {pid}")
     print()
-    print(f"{'SLUG':<28} {'STATUS':<8} {'PORT':<5} BRANCH")
+    print(f"{'SLUG':<28} {'STATUS':<10} {'MODE':<13} {'PORT':<5} TITLE")
     for row in rows:
+        mode = "content" if metadata_is_content_only(row) else "worktree"
+        title = str(row.get("title") or row.get("branch") or "")
         print(
             f"{str(row.get('slug', '')):<28} "
-            f"{str(row.get('status', '')):<8} "
+            f"{str(row.get('status', '')):<10} "
+            f"{mode:<13} "
             f"{str(row.get('port', '')):<5} "
-            f"{row.get('branch', '')}"
+            f"{title}"
         )
+    print()
+    print("Open a workspace with: cmux-evidence open <slug>")
     return 0
 
 
@@ -1014,11 +1496,31 @@ def current_workspace_metadata() -> dict[str, Any]:
 
 
 def print_metadata(metadata: dict[str, Any]) -> None:
+    if metadata_is_content_only(metadata):
+        pages = metadata.get("pages") if isinstance(metadata.get("pages"), dict) else {}
+        fields: list[tuple[str, Any]] = [
+            ("Title", metadata.get("title")),
+            ("Slug", metadata.get("slug")),
+            ("Workspace mode", "content-only"),
+            ("Workspace", metadata.get("workspaceRoot") or metadata.get("path")),
+            ("Brief", pages.get("brief") or metadata.get("page")),
+            ("Draft", pages.get("draft")),
+            ("Report", pages.get("report")),
+            ("Preview", metadata.get("url")),
+            ("Port", metadata.get("port")),
+            ("Status", metadata.get("status")),
+        ]
+        for label, value in fields:
+            if value not in (None, ""):
+                print(f"{label}: {value}")
+        return
+
     fields = ["title", "slug", "branch", "page", "port", "url", "status"]
     for field in fields:
         value = metadata.get(field)
         if value not in (None, ""):
-            print(f"{field.title()}: {value}")
+            label = "URL" if field == "url" else field.title()
+            print(f"{label}: {value}")
 
 
 def current_command() -> int:
@@ -1143,17 +1645,29 @@ def status_command() -> int:
 
     print_metadata(metadata)
     print()
-    print("Git status:")
-    root = git_root(Path.cwd().resolve()) or Path.cwd().resolve()
-    result = run_git(root, ["status", "--short"], check=False)
-    print(result.stdout.rstrip() or "clean")
+    if metadata_is_content_only(metadata):
+        print("Workspace storage: local content workspace")
+        print("Git checkout: not used for this workspace mode")
+    else:
+        print("Git status:")
+        root = git_root(Path.cwd().resolve())
+        if root is None:
+            print("not a Git checkout")
+        else:
+            result = run_git(root, ["status", "--short"], check=False)
+            print(result.stdout.rstrip() or "clean")
     print()
     url = str(metadata.get("url") or "")
     if url:
         reachable = url_port_reachable(url)
-        print(f"Evidence port: {'reachable' if reachable else 'not reachable'} ({url})")
+        if reachable:
+            print(f"Preview server: reachable ({url})")
+        else:
+            slug = str(metadata.get("slug") or "<slug>")
+            print(f"Preview server: not running yet ({url})")
+            print(f"Open with: cmux-evidence open {slug}")
     else:
-        print("Evidence port: unknown")
+        print("Preview server: unknown")
     return 0
 
 
@@ -1400,7 +1914,9 @@ def workspace_target_config_metadata() -> tuple[Path, dict[str, Any], dict[str, 
 def validate_command() -> int:
     try:
         target, config, metadata = workspace_target_config_metadata()
-        command = validation_command(target, config)
+        repaired_shadow_root = ensure_content_shadow_runtime(target, config, metadata)
+        validation_target = repaired_shadow_root if is_content_workspace(config, metadata) else Path(str(metadata.get("shadowRuntimeRoot") or target)).expanduser().resolve()
+        command = validation_command(validation_target, config)
     except (TypeError, ValueError) as exc:
         return error(str(exc))
 
@@ -1417,7 +1933,15 @@ def validate_command() -> int:
         cmux_best_effort(["set-status", "validation", "running", "--workspace", workspace, "--color", "#ff9500"])
         cmux_best_effort(["set-progress", "0.2", "--label", "Validating", "--workspace", workspace])
 
-    completed = subprocess.run(command, cwd=target, shell=True)
+    try:
+        completed = subprocess.run(command, cwd=validation_target, shell=True)
+    except OSError as exc:
+        return error(
+            "Validation could not start.\n"
+            f"Workspace: {target}\n"
+            f"Runtime: {validation_target}\n"
+            f"Reason: {exc}"
+        )
 
     if workspace:
         if completed.returncode == 0:
@@ -1432,12 +1956,36 @@ def validate_command() -> int:
 
 def diff_command(*, stat_only: bool = False) -> int:
     try:
-        target, _config, metadata = workspace_target_config_metadata()
+        target, config, metadata = workspace_target_config_metadata()
     except (TypeError, ValueError) as exc:
         return error(str(exc))
 
     print_metadata(metadata)
     print()
+
+    if is_content_workspace(config, metadata):
+        baseline_root = content_baseline_root(target)
+        baseline = read_deliverable_tree(baseline_root, config) if baseline_root else {}
+        current = read_deliverable_tree(target, config)
+        label = "last published snapshot" if baseline_root and baseline_root.name == "last-published" else "initial snapshot"
+        if baseline_root is None:
+            print("No content snapshot found; showing all publishable files as new.")
+        else:
+            print(f"Comparing publishable content against {label}.")
+        print("Publishable by default: pages/report.md and queries/**")
+        if config.get("publishReports"):
+            print("Also included by config: reports/**")
+        if config.get("publishData"):
+            print("Also included by config: data/**")
+        else:
+            data_files = [p for p in (target / "data").rglob("*") if p.is_file()] if (target / "data").exists() else []
+            if data_files:
+                print("Local data files are private by default and are not included in this diff.")
+        print()
+        rendered, _changed = render_content_diff(baseline=baseline, current=current, stat_only=stat_only)
+        print(rendered, end="")
+        return 0
+
     commands = [["status", "--short"], ["diff", "--stat"]]
     if not stat_only:
         commands.append(["diff"])
@@ -1450,7 +1998,7 @@ def diff_command(*, stat_only: bool = False) -> int:
             print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
-        if not result.stdout and git_args == ["status", "--short"]:
+        if not result.stdout and result.returncode == 0 and git_args == ["status", "--short"]:
             print("clean")
         if result.returncode != 0:
             exit_code = result.returncode
@@ -1481,6 +2029,189 @@ def git_changed_paths(target: Path) -> list[str]:
 
 def path_matches_any(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
+
+
+def should_include_content_path(rel: str, config: dict[str, Any]) -> bool:
+    rel = rel.replace(os.sep, "/")
+    include_reports = bool(config.get("publishReports"))
+    include_data = bool(config.get("publishData"))
+
+    if rel == "pages/report.md" or rel.startswith("queries/"):
+        return True
+    if include_reports and rel.startswith("reports/"):
+        return True
+    if include_data and rel.startswith("data/"):
+        return True
+    return False
+
+
+def iter_content_deliverable_files(workspace_root: Path, config: dict[str, Any]) -> list[Path]:
+    files: list[Path] = []
+    for top in ["pages", "queries", "reports", "data"]:
+        root = workspace_root / top
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(workspace_root).as_posix()
+            if should_include_content_path(rel, config):
+                files.append(path)
+    return files
+
+
+def read_deliverable_tree(root: Path, config: dict[str, Any]) -> dict[str, bytes]:
+    files: dict[str, bytes] = {}
+    for path in iter_content_deliverable_files(root, config):
+        rel = path.relative_to(root).as_posix()
+        try:
+            files[rel] = path.read_bytes()
+        except OSError:
+            continue
+    return files
+
+
+def write_deliverable_tree(source_root: Path, target_root: Path, config: dict[str, Any]) -> None:
+    if target_root.exists():
+        shutil.rmtree(target_root)
+    target_root.mkdir(parents=True, exist_ok=True)
+    for source in iter_content_deliverable_files(source_root, config):
+        rel = source.relative_to(source_root)
+        target = target_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
+def content_snapshot_root(workspace_root: Path, name: str) -> Path:
+    return workspace_root / ".cmux" / "snapshots" / name
+
+
+def content_baseline_root(workspace_root: Path) -> Path | None:
+    published = content_snapshot_root(workspace_root, "last-published")
+    if published.exists():
+        return published
+    initial = content_snapshot_root(workspace_root, "initial")
+    if initial.exists():
+        return initial
+    return None
+
+
+def write_content_snapshot(workspace_root: Path, config: dict[str, Any], name: str) -> Path:
+    path = content_snapshot_root(workspace_root, name)
+    write_deliverable_tree(workspace_root, path, config)
+    return path
+
+
+def bytes_are_text(value: bytes) -> bool:
+    if b"\0" in value:
+        return False
+    try:
+        value.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def short_hash(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()[:12]
+
+
+def render_content_diff(
+    *,
+    baseline: dict[str, bytes],
+    current: dict[str, bytes],
+    stat_only: bool = False,
+) -> tuple[str, bool]:
+    paths = sorted(set(baseline) | set(current))
+    changed = False
+    lines: list[str] = []
+    for rel in paths:
+        before = baseline.get(rel)
+        after = current.get(rel)
+        if before == after:
+            continue
+        changed = True
+        if before is None:
+            lines.append(f"A  {rel}")
+        elif after is None:
+            lines.append(f"D  {rel}")
+        else:
+            lines.append(f"M  {rel}")
+    if not changed:
+        return "clean\n", False
+    if stat_only:
+        return "\n".join(lines) + "\n", True
+
+    detail: list[str] = [*lines, ""]
+    for rel in paths:
+        before = baseline.get(rel)
+        after = current.get(rel)
+        if before == after:
+            continue
+        if before is None:
+            before = b""
+        if after is None:
+            after = b""
+        if not bytes_are_text(before) or not bytes_are_text(after):
+            detail.append(f"Binary files differ: {rel} ({short_hash(before)} -> {short_hash(after)})")
+            detail.append("")
+            continue
+        before_lines = before.decode("utf-8").splitlines(keepends=True)
+        after_lines = after.decode("utf-8").splitlines(keepends=True)
+        detail.extend(
+            difflib.unified_diff(
+                before_lines,
+                after_lines,
+                fromfile=f"baseline/{rel}",
+                tofile=f"current/{rel}",
+            )
+        )
+        if detail and detail[-1].strip():
+            detail.append("\n")
+    return "".join(line if line.endswith("\n") else f"{line}\n" for line in detail), True
+
+
+def content_publish_worktree_root(runtime: Path, slug: str) -> Path:
+    return runtime / ".cmux" / "publish-worktrees" / slug
+
+
+def materialize_content_for_publish(workspace_root: Path, publish_root: Path, metadata: dict[str, Any], config: dict[str, Any]) -> list[str]:
+    slug = str(metadata.get("slug") or workspace_root.name)
+    written: list[str] = []
+
+    report = workspace_root / "pages" / "report.md"
+    if report.exists():
+        target = publish_root / "pages" / "reports" / slug / "index.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(report, target)
+        written.append(target.relative_to(publish_root).as_posix())
+
+    queries = workspace_root / "queries"
+    if queries.exists():
+        target_queries = publish_root / "queries" / slug
+        if target_queries.exists():
+            shutil.rmtree(target_queries)
+        for source in sorted(queries.rglob("*")):
+            if source.is_file():
+                target = target_queries / source.relative_to(queries)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+                written.append(target.relative_to(publish_root).as_posix())
+
+    if config.get("publishReports"):
+        reports = workspace_root / "reports"
+        if reports.exists():
+            target_reports = publish_root / "reports" / slug
+            if target_reports.exists():
+                shutil.rmtree(target_reports)
+            for source in sorted(reports.rglob("*")):
+                if source.is_file():
+                    target = target_reports / source.relative_to(reports)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+                    written.append(target.relative_to(publish_root).as_posix())
+
+    return written
 
 
 def ensure_no_blocked_changes(target: Path, config: dict[str, Any]) -> None:
@@ -1553,9 +2284,150 @@ def confirm_publish(metadata: dict[str, Any]) -> bool:
     return sys.stdin.readline().strip() == "publish"
 
 
+def confirm_content_publish(metadata: dict[str, Any]) -> bool:
+    slug = str(metadata.get("slug") or "")
+    print("Publish this report for review?")
+    print()
+    print(f"Title:  {metadata.get('title', '')}")
+    print(f"Report: pages/report.md")
+    print(f"Route:  /reports/{slug}/")
+    print()
+    print("This publishes the polished report and queries/**. Draft notes and local data stay private by default.")
+    print("Type 'publish' to continue: ", end="", flush=True)
+    return sys.stdin.readline().strip() == "publish"
+
+
+def publish_content_workspace(target: Path, config: dict[str, Any], metadata: dict[str, Any]) -> int:
+    workspace_root = Path(str(metadata.get("workspaceRoot") or target)).expanduser().resolve()
+    runtime_value = metadata.get("runtimeRoot") or config.get("runtimeRoot")
+    if not runtime_value:
+        return error("Content-only workspace metadata is missing runtimeRoot")
+    runtime = Path(str(runtime_value)).expanduser().resolve()
+    slug = str(metadata.get("slug") or workspace_root.name)
+    branch = f"analysis/{slug}"
+    base_branch = str(config.get("baseBranch") or "main")
+    publish_root = content_publish_worktree_root(runtime, slug)
+
+    validation_result = validate_command()
+    if validation_result != 0:
+        return validation_result
+
+    diff_command(stat_only=True)
+    if not confirm_content_publish(metadata):
+        print("Publish cancelled.")
+        return 1
+
+    data_files = [p for p in (workspace_root / "data").rglob("*") if p.is_file()] if (workspace_root / "data").exists() else []
+    if data_files and not config.get("publishData"):
+        print()
+        print("Note: local data files were not published. They are private by default:")
+        for path in data_files[:20]:
+            print(f"- {path.relative_to(workspace_root).as_posix()}")
+        if len(data_files) > 20:
+            print(f"- ... {len(data_files) - 20} more")
+
+    try:
+        runtime, _runtime_config = load_project(runtime)
+    except ValueError as exc:
+        return error(str(exc))
+
+    if publish_root.exists() and not (publish_root / ".git").exists():
+        shutil.rmtree(publish_root)
+    if not publish_root.exists():
+        result = run_git(runtime, ["worktree", "add", "-B", branch, str(publish_root), base_branch], check=False)
+    else:
+        result = run_git(publish_root, ["checkout", "-B", branch], check=False)
+    if result.returncode != 0:
+        return error((result.stderr or result.stdout or "Failed to prepare publish worktree").strip())
+
+    target_report_dir = publish_root / "pages" / "reports" / slug
+    target_queries_dir = publish_root / "queries" / slug
+    target_reports_dir = publish_root / "reports" / slug
+    for path in [target_report_dir, target_queries_dir, target_reports_dir]:
+        if path.exists():
+            shutil.rmtree(path)
+
+    written = materialize_content_for_publish(workspace_root, publish_root, metadata, config)
+    if not written:
+        return error("No publishable content found. Add a polished report to pages/report.md or reusable SQL under queries/.")
+
+    print()
+    print("Materialized publish files:")
+    for rel in written:
+        print(f"- {rel}")
+
+    changed = git_changed_paths(publish_root)
+    if not changed:
+        print("No publish changes after materialization.")
+        write_content_snapshot(workspace_root, config, "last-published")
+        try:
+            update_workspace_status(workspace_root, config, metadata, "published")
+        except (OSError, ValueError) as exc:
+            print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+        return 0
+
+    message = f"Publish report: {metadata.get('title') or slug}"
+    run_git(publish_root, ["add", "-A"], check=False)
+    commit = run_git(publish_root, ["commit", "-m", message], check=False)
+    if commit.stdout:
+        print(commit.stdout, end="")
+    if commit.stderr:
+        print(commit.stderr, end="", file=sys.stderr)
+    if commit.returncode != 0:
+        return commit.returncode
+
+    try:
+        update_workspace_status(workspace_root, config, metadata, "published")
+        write_content_snapshot(workspace_root, config, "last-published")
+    except (OSError, ValueError) as exc:
+        print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+
+    push = run_git(publish_root, ["push", "-u", "origin", branch], check=False)
+    if push.stdout:
+        print(push.stdout, end="")
+    if push.stderr:
+        print(push.stderr, end="", file=sys.stderr)
+    if push.returncode != 0:
+        print()
+        print("Push failed or no remote is configured. Your publish commit is ready locally:")
+        print(f"Worktree: {publish_root}")
+        print(f"Branch:   {branch}")
+        print(f"Manual push: git -C {publish_root} push -u origin {branch}")
+        return 0
+
+    gh = shutil.which("gh")
+    if not gh:
+        print()
+        print("gh CLI not found. Open a PR manually from this branch:")
+        print(f"git -C {publish_root} push -u origin {branch}")
+        return 0
+
+    body_path = write_pr_body(publish_root, {**metadata, "branch": branch, "page": f"pages/reports/{slug}/index.md"})
+    pr = subprocess.run(
+        [gh, "pr", "create", "--title", message, "--body-file", str(body_path)],
+        cwd=publish_root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if pr.stdout:
+        print(pr.stdout, end="")
+    if pr.stderr:
+        print(pr.stderr, end="", file=sys.stderr)
+    if pr.returncode == 0:
+        try:
+            update_workspace_status(workspace_root, config, metadata, "pr-opened")
+        except (OSError, ValueError) as exc:
+            print(f"Warning: failed to update workspace metadata: {exc}", file=sys.stderr)
+    return 0
+
+
 def publish_command() -> int:
     try:
         target, config, metadata = workspace_target_config_metadata()
+        if is_content_workspace(config, metadata):
+            return publish_content_workspace(target, config, metadata)
         ensure_analysis_workspace(metadata)
         ensure_no_blocked_changes(target, config)
     except (TypeError, ValueError) as exc:

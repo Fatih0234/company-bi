@@ -1,16 +1,17 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DuckDbBiConfig, EvidenceSourceInfo, TableSource } from "../types";
-import { normalizeSlashes, resolveProjectPath, toProjectRelative } from "./paths";
+import { normalizeSlashes, resolveProjectPath, sqlPathForDuckDb, toRootRelative } from "./paths";
 
-export function sourceSqlToSubquery(sql: string): string {
-  const trimmed = sql.trim().replace(/;\s*$/g, "");
+export function sourceSqlToSubquery(sql: string, config?: DuckDbBiConfig): string {
+  const trimmed = rewriteSourceFileReads(sql.trim().replace(/;\s*$/g, ""), config);
   if (!trimmed) throw new Error("Evidence source SQL is empty");
   return `(${trimmed})`;
 }
 
 export async function discoverEvidenceSources(config: DuckDbBiConfig): Promise<EvidenceSourceInfo[]> {
-  const sourcesRoot = path.join(config.projectRoot, "sources");
+  const root = config.evidenceSourceRoot ?? config.projectRoot;
+  const sourcesRoot = path.join(root, "sources");
   try {
     const s = await stat(sourcesRoot);
     if (!s.isDirectory()) return [];
@@ -47,7 +48,7 @@ export async function discoverEvidenceSources(config: DuckDbBiConfig): Promise<E
         source: sourceName,
         name: tableName,
         qualifiedName: `${sourceName}.${tableName}`,
-        path: normalizeSlashes(path.relative(config.projectRoot, abs)),
+        path: normalizeSlashes(path.relative(root, abs)),
         absolutePath: abs,
       });
     }
@@ -56,17 +57,23 @@ export async function discoverEvidenceSources(config: DuckDbBiConfig): Promise<E
 }
 
 export async function readEvidenceSourceSql(config: DuckDbBiConfig, source: EvidenceSourceInfo): Promise<string> {
-  const abs = resolveProjectPath(config, source.path, "Evidence source SQL path");
+  const root = config.evidenceSourceRoot ?? config.projectRoot;
+  const abs = path.isAbsolute(source.absolutePath)
+    ? source.absolutePath
+    : resolveProjectPath({ ...config, projectRoot: root }, source.path, "Evidence source SQL path");
   const sql = await readFile(abs, "utf8");
-  return sourceSqlToSubquery(sql);
+  return sourceSqlToSubquery(sql, config);
 }
 
 export async function resolveEvidenceTableSource(config: DuckDbBiConfig, table: string): Promise<TableSource | undefined> {
   const normalized = table.replace(/\\/g, "/");
+  const root = config.evidenceSourceRoot ?? config.projectRoot;
   const sources = await discoverEvidenceSources(config);
   const match = sources.find((source) => {
+    const rootRel = normalizeSlashes(toRootRelative(root, source.absolutePath));
     return source.qualifiedName === table
       || source.path === normalized
+      || rootRel === normalized
       || source.name === table && sources.filter((candidate) => candidate.name === table).length === 1;
   });
   if (!match) return undefined;
@@ -89,4 +96,23 @@ export function evidenceSourceToPublic(source: EvidenceSourceInfo) {
     source_type: "evidence_sql" as const,
     recommended_for_dashboard: true,
   };
+}
+
+function rewriteSourceFileReads(sql: string, config: DuckDbBiConfig | undefined): string {
+  if (!config) return sql;
+  const root = config.evidenceSourceRoot ?? config.shadowRuntimeRoot ?? config.runtimeRoot ?? config.projectRoot;
+  return sql.replace(
+    /(read_(?:csv|csv_auto|parquet|json|json_auto)\s*\(\s*)'((?:''|[^'])*)'/gi,
+    (full, prefix: string, rawPath: string) => {
+      const unescaped = rawPath.replace(/''/g, "'");
+      if (!unescaped || path.isAbsolute(unescaped) || /^[a-z]+:/i.test(unescaped)) return full;
+      const absolute = path.resolve(root, unescaped);
+      const duckPath = sqlPathForDuckDb(config, absolute);
+      return `${prefix}${sqlStringLiteral(duckPath)}`;
+    },
+  );
+}
+
+function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }

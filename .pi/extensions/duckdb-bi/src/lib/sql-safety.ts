@@ -1,5 +1,5 @@
 import path from "node:path";
-import { discoverDataFiles, normalizeSlashes, resolveProjectPath, toProjectRelative } from "./paths";
+import { discoverDataFiles, normalizeSlashes, resolveDataPath, resolveProjectPath, sqlPathForDuckDb, toProjectRelative } from "./paths";
 import { resolveEvidenceTableSource } from "./evidence-sources";
 import type { DuckDbBiConfig, TableSource } from "../types";
 
@@ -86,21 +86,22 @@ export function validateSqlFileAccess(config: DuckDbBiConfig, sql: string): void
   const fileReaderRe = /read_(?:csv|csv_auto|parquet|json|json_auto)\s*\(\s*'((?:''|[^'])*)'/gi;
   for (const match of sql.matchAll(fileReaderRe)) {
     const raw = match[1].replace(/''/g, "'");
-    resolveProjectPath(config, raw, "SQL file path");
+    resolveDataPath(config, raw, "SQL file path");
   }
 }
 
 export function tableSourceForFile(config: DuckDbBiConfig, filePath: string, displayName?: string): TableSource {
-  const abs = resolveProjectPath(config, filePath, "table file path");
+  const abs = resolveDataPath(config, filePath, "table file path");
   const rel = normalizeSlashes(path.relative(config.projectRoot, abs));
+  const duckPath = sqlPathForDuckDb(config, abs);
   const ext = path.extname(abs).toLowerCase();
   let sql: string;
   if (ext === ".csv" || ext === ".tsv") {
-    sql = `read_csv_auto(${sqlStringLiteral(rel)})`;
+    sql = `read_csv_auto(${sqlStringLiteral(duckPath)})`;
   } else if (ext === ".parquet") {
-    sql = `read_parquet(${sqlStringLiteral(rel)})`;
+    sql = `read_parquet(${sqlStringLiteral(duckPath)})`;
   } else if (ext === ".json" || ext === ".jsonl") {
-    sql = `read_json_auto(${sqlStringLiteral(rel)})`;
+    sql = `read_json_auto(${sqlStringLiteral(duckPath)})`;
   } else {
     throw new Error(`Unsupported table file extension: ${ext}`);
   }

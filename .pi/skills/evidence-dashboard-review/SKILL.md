@@ -25,14 +25,14 @@ Use this skill when acting as a BI/product reviewer for an Evidence dashboard. T
 6. Inspect safe source SQL files only when metric meaning or data availability affects the review.
 7. Use CMUX preview helpers when visible rendering matters.
 
-Useful commands:
+Useful commands use the workspace helper shown in dynamic context. In content-only workspaces this is usually an absolute runtime helper path because `./bin/cmux-evidence` does not exist in the content workspace.
 
 ```bash
-./bin/cmux-evidence preview-url
-./bin/cmux-evidence browser-surfaces
-./bin/cmux-evidence preview-snapshot <surface-ref>
-./bin/cmux-evidence preview-screenshot <surface-ref> /tmp/evidence-preview.png
-./bin/cmux-evidence validate
+<workspace-helper> preview-url
+<workspace-helper> browser-surfaces
+<workspace-helper> preview-snapshot <surface-ref>
+<workspace-helper> preview-screenshot <surface-ref> /tmp/evidence-preview.png
+<workspace-helper> validate
 ```
 
 ## Review checklist
@@ -70,7 +70,7 @@ Useful commands:
 
 ### Evidence/runtime quality
 
-- Does `./bin/cmux-evidence validate` pass when completion quality matters?
+- Does `<workspace-helper> validate` pass when completion quality matters?
 - Does the CMUX browser preview render without Evidence errors?
 - Are there blank charts, missing query results, or obvious layout problems?
 

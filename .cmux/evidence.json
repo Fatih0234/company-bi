@@ -7,6 +7,8 @@
   "url": "http://localhost:3000",
   "workspaceDir": ".workspaces",
   "registryPath": ".cmux/registry.json",
+  "workspaceMode": "content-only",
+  "runtimeDir": "~/.local/share/lumen-bi/runtime/company-bi",
   "analysisBasePort": 3100,
   "validateCommand": "npm run build",
   "onboardingAi": {
@@ -14,7 +16,8 @@
     "model": "mimo-v2.5-free",
     "thinking": "medium"
   },
-  "allowedAgentPaths": ["pages/**", "queries/**"],
-  "askBeforeAgentPaths": ["components/**", "sources/**", "package.json", "package-lock.json"],
-  "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**"]
+  "contentVisiblePaths": ["pages/**", "queries/**", "reports/**", "data/**"],
+  "allowedAgentPaths": ["pages/**", "queries/**", "reports/**", "data/**", ".cmux/workspace.json", ".cmux/data-profile.json", ".pi/duckdb/**"],
+  "askBeforeAgentPaths": ["sources/**", "components/**"],
+  "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**", "package.json", "package-lock.json", "bin/**", "scripts/**", ".pi/extensions/**"]
 }

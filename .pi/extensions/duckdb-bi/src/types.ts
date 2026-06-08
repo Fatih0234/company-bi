@@ -1,5 +1,18 @@
 export interface DuckDbBiConfig {
+  /** User/content root. DuckDB BI artifacts are written relative to this root. */
   projectRoot: string;
+  /** Backward-compatible alias for projectRoot in legacy workspaces. */
+  workspaceRoot?: string;
+  /** Runtime/source checkout root for content-only workspaces. */
+  runtimeRoot?: string;
+  /** Generated Evidence app root for content-only workspaces. */
+  shadowRuntimeRoot?: string;
+  /** Root used to discover Evidence `sources/`. */
+  evidenceSourceRoot?: string;
+  /** Working directory for DuckDB process execution. */
+  duckdbCwd?: string;
+  /** Approved roots for data-file discovery and read_* path validation. */
+  dataRoots?: Array<{ root: string; label: "workspace" | "runtime" | "shadow" }>;
   runtimeDir: string;
   exportsDir: string;
   reportsDir: string;
@@ -84,6 +97,7 @@ export interface DataFileInfo {
   type: "csv" | "parquet" | "json" | "duckdb" | "unknown";
   size_bytes?: number;
   alias: string;
+  root?: "workspace" | "runtime" | "shadow";
 }
 
 export interface TableSource {

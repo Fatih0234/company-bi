@@ -3,7 +3,7 @@
     "evidence-new-analysis": {
       "type": "command",
       "title": "Evidence: New Analysis",
-      "subtitle": "Create a Git worktree, Evidence page, Pi agent, preview, and logs",
+      "subtitle": "Create a clean analysis workspace, Evidence preview, Pi agent, and logs",
       "command": "./bin/cmux-evidence new",
       "target": "currentTerminal",
       "palette": true
@@ -27,7 +27,7 @@
     "evidence-status": {
       "type": "command",
       "title": "Evidence: Status",
-      "subtitle": "Show Git, port, and workspace status",
+      "subtitle": "Show preview and workspace status",
       "command": "./bin/cmux-evidence status",
       "target": "currentTerminal",
       "palette": true
@@ -43,15 +43,15 @@
     "evidence-diff": {
       "type": "command",
       "title": "Evidence: Show Diff",
-      "subtitle": "Show current analysis Git diff",
+      "subtitle": "Show current analysis content changes",
       "command": "./bin/cmux-evidence diff",
       "target": "currentTerminal",
       "palette": true
     },
     "evidence-publish": {
       "type": "command",
-      "title": "Evidence: Publish Draft",
-      "subtitle": "Validate, commit, push, and prepare a PR",
+      "title": "Evidence: Publish Report",
+      "subtitle": "Validate and publish the polished report for review",
       "command": "./bin/cmux-evidence publish",
       "target": "currentTerminal",
       "palette": true

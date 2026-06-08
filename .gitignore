@@ -29,6 +29,7 @@ connection.options.yaml
 .cmux/registry.json
 .cmux/workspace.json
 .cmux/pr-body.md
+.cmux/publish-worktrees/
 
 # Local agent/index state
 .agent/

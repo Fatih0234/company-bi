@@ -28,6 +28,18 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isContentWorkspace(evidenceConfig: JsonObject | undefined, workspace: JsonObject | undefined): boolean {
+  if (stringValue(workspace?.kind) === "lumen-analysis-workspace") return true;
+  const mode = stringValue(workspace?.workspaceMode) || stringValue(evidenceConfig?.workspaceMode);
+  const hasSplitRoots = Boolean(workspace?.workspaceRoot || workspace?.shadowRuntimeRoot || evidenceConfig?.workspaceRoot || evidenceConfig?.shadowRuntimeRoot);
+  return mode === "content-only" && hasSplitRoots;
+}
+
+function runtimeRootFor(root: string, evidenceConfig: JsonObject | undefined, workspace: JsonObject | undefined): string {
+  const configured = stringValue(workspace?.runtimeRoot) || stringValue(evidenceConfig?.runtimeRoot);
+  return configured ? resolve(root, configured) : root;
+}
+
 /**
  * Find the project root by walking up from cwd looking for .cmux/evidence.json.
  */
@@ -86,9 +98,12 @@ export function updateIntention(
   const configuredRegistry = evidenceConfig
     ? stringValue(evidenceConfig.registryPath)
     : "";
+  const registryBaseRoot = isContentWorkspace(evidenceConfig, workspace)
+    ? runtimeRootFor(evidenceRoot, evidenceConfig, workspace)
+    : evidenceRoot;
   const registryPath = configuredRegistry
-    ? resolve(evidenceRoot, configuredRegistry)
-    : join(evidenceRoot, ".cmux", "registry.json");
+    ? resolve(registryBaseRoot, configuredRegistry)
+    : join(registryBaseRoot, ".cmux", "registry.json");
 
   if (existsSync(registryPath)) {
     const registry = safeReadJson(registryPath);
