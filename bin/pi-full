@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run PI with local .pi package + global resources (no isolation).
+#
+# Unlike lumen-pi, this does NOT suppress global resource discovery
+# (extensions, skills, prompts, themes from ~/.pi/agent/).
+# Settings merge normally: global ~/.pi/agent/settings.json + local .pi/settings.json.
+# Sessions go to the global default (~/.pi/agent/sessions/).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+exec pi \
+  -e "$PROJECT_ROOT/.pi" \
+  "$@"

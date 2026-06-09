@@ -14,6 +14,9 @@ Use this skill when acting as a BI/product reviewer for an Evidence dashboard. T
 - Prefer concrete findings over generic advice.
 - Separate what you verified from what you inferred.
 - Do not mutate files unless the user asks for changes.
+- Review the dashboard's analytical depth, not only its Evidence syntax or visual rendering.
+- Ask whether the report reveals something decision-relevant, non-obvious, or actionable.
+- Use `evidence-bi-thinking` as the reference frame when judging whether the report has strong analytical moves and a coherent story.
 
 ## First steps
 
@@ -22,6 +25,7 @@ Use this skill when acting as a BI/product reviewer for an Evidence dashboard. T
 3. Inspect the **Brief** page (primary page) from `.cmux/workspace.json` or dynamic context.
 4. Inspect the **Draft** page for exploration quality and work-in-progress.
 5. Inspect the **Report** page if it exists for polished dashboard quality.
+- Check whether the report has an Insight Candidate Scan or Report Plan in the Draft page. If not, infer the missing plan from the current report and call out where the dashboard may have jumped directly from data to charts.
 6. Inspect safe source SQL files only when metric meaning or data availability affects the review.
 7. Use CMUX preview helpers when visible rendering matters.
 
@@ -53,6 +57,21 @@ Useful commands use the workspace helper shown in dynamic context. In content-on
 - Are filters useful and not merely decorative?
 - Are empty/low-value sections removed or explained?
 
+### Insight quality and analytical depth
+
+- Does the dashboard reveal something non-obvious or decision-relevant?
+- Does each major chart answer a clear business question?
+- Is there a coherent story arc, or is the page just a list of charts?
+- Are top-N charts contextualized with share of total, change, benchmark, or drilldown?
+- If averages are used, is there a distribution, median, percentile, or caveat when skew may matter?
+- If time exists, does the dashboard show trend, change, seasonality, or before/after comparison where useful?
+- If entities exist, does the dashboard consider concentration, outliers, or high-value segments?
+- If stages/statuses exist, does the dashboard consider funnel or drop-off analysis?
+- If multiple meaningful dimensions exist, does the dashboard compare segments rather than only showing totals?
+- Are filters purposeful and tied to decisions, not merely decorative?
+- Is there at least one deeper analytical move when the data supports it: concentration, distribution, outlier, benchmark, driver, cohort, funnel, seasonality, or risk/opportunity view?
+- Does the narrative interpret the chart and explain why it matters?
+
 ### Metric clarity
 
 - Are metrics named in business terms?
@@ -67,6 +86,10 @@ Useful commands use the workspace helper shown in dynamic context. In content-on
 - Is the top of the page useful at a glance?
 - Are tables sorted and scoped to useful rows?
 - Do interactive inputs have clear labels and defaults?
+- Does the dashboard avoid a wall of tables?
+- Does it avoid generic chart titles that only describe the axes?
+- Does it avoid giving every section equal visual weight?
+- Does it avoid charts that exist only because they were easy to make?
 
 ### Evidence/runtime quality
 
@@ -86,6 +109,11 @@ Overall: <1-2 sentence judgment>
 ## What works
 - ...
 
+## Insight quality
+- Strongest analytical move: ...
+- Missing analytical opportunity: ...
+- Suggested next insight to add: ...
+
 ## Issues / risks
 - ...
 
@@ -101,3 +129,5 @@ Overall: <1-2 sentence judgment>
 ```
 
 When the user asks you to apply improvements, switch back to the main `evidence-dashboard` build/revision workflow and make small, targeted edits.
+
+When the requested improvements are about analytical depth, story, chart choice, or dashboard usefulness, first use `evidence-bi-thinking` to generate or revise the Insight Candidate Scan, then switch to `evidence-dashboard` for implementation.

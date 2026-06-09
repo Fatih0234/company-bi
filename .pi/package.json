@@ -10,12 +10,13 @@
       "./extensions/pi-ask-user",
       "./extensions/analysis-intention",
       "./extensions/duckdb-bi",
-      "./extensions/lumen-bi"
+      "./extensions/lumen-bi",
+      "./extensions/evidence-render-guard.ts"
     ],
     "skills": [
+      "./skills/evidence",
       "./skills/evidence-dashboard",
       "./skills/evidence-dashboard-review",
-      "./skills/evidence-data-semantics",
       "./skills/data-discovery",
       "./skills/cmux-workspace",
       "./skills/cmux-browser",

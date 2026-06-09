@@ -12,6 +12,7 @@ Before answering questions about indexed external sources, read the matching `.a
 
 Before answering questions or implementing against indexed external documentation, read the matching `.agent/docs/<name>/INDEX.md` navigation layer first.
 
+- **evidence-studio** — Documentation source indexed from llms.txt. Source: `https://docs.evidence.studio/llms.txt`. Agent index: `.agent/docs/evidence-studio/INDEX.md`
 - **pi** — Documentation source scanned recursively from GitHub directory: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs. Source: `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs`. Agent index: `.agent/docs/pi/INDEX.md`
 - **github-com** — </div>. Source: `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs`. Agent index: `.agent/docs/github-com/INDEX.md`
 - **cmux-com** — Documentation source indexed from llms.txt. Source: `https://cmux.com/llms.txt`. Agent index: `.agent/docs/cmux-com/INDEX.md`

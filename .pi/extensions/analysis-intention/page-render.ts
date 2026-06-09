@@ -56,22 +56,59 @@ function listValue(intention: Intention, key: keyof Intention): string[] {
 }
 
 /**
- * Render a single question page Markdown.
+ * Extract a short, sidebar-friendly label from a question string.
  *
- * @param title - The workspace title
- * @param question - The question text
- * @param questionNumber - 1-based index of this question
- * @param totalQuestions - Total number of questions
- * @returns The complete Markdown content for the question page
+ * Most questions follow the pattern "Topic \u2014 Details" where the part before
+ * the em-dash is the natural short label. If there is no em-dash, we fall back
+ * to the first few words.
+ *
+ * @param question - The full question text
+ * @returns A short label (2-5 words ideal, never more than ~40 chars)
  */
+function extractShortLabel(question: string): string {
+  const trimmed = question.trim();
+
+  // Split on em-dash (—) — the most common pattern in LLM-generated questions
+  const emDashParts = trimmed.split(/\s*—\s*/);
+  if (emDashParts.length > 1) {
+    const candidate = emDashParts[0].trim();
+    if (candidate.length <= 40 && candidate.split(/\s+/).length <= 6) {
+      return candidate;
+    }
+  }
+
+  // Split on en-dash (–) as fallback
+  const enDashParts = trimmed.split(/\s*–\s*/);
+  if (enDashParts.length > 1) {
+    const candidate = enDashParts[0].trim();
+    if (candidate.length <= 40 && candidate.split(/\s+/).length <= 6) {
+      return candidate;
+    }
+  }
+
+  // Split on regular dash (-) if preceded/followed by spaces
+  const dashParts = trimmed.split(/\s+-\s+/);
+  if (dashParts.length > 1) {
+    const candidate = dashParts[0].trim();
+    if (candidate.length <= 40 && candidate.split(/\s+/).length <= 6) {
+      return candidate;
+    }
+  }
+
+  // No dash found — take the first 4 words, truncated at 40 chars
+  const words = trimmed.split(/\s+/).slice(0, 4).join(' ');
+  return words.length > 40 ? words.slice(0, 37) + '...' : words;
+}
+
 export function renderQuestionPage(
   title: string,
   question: string,
   questionNumber: number,
   totalQuestions: number,
 ): string {
-  const fullTitle = `Q${questionNumber}: ${question}`;
-  const titleYaml = JSON.stringify(fullTitle);
+  const shortLabel = extractShortLabel(question);
+  const sidebarTitle = `Q${questionNumber}: ${shortLabel}`;
+  const titleYaml = JSON.stringify(sidebarTitle);
   return `---
 title: ${titleYaml}
 ---
@@ -123,8 +160,8 @@ export function renderAnalysisPage(title: string, slug: string, intention: Inten
     ? questions
         .map((q, i) => {
           const num = i + 1;
-          const shortQ = q.length > 60 ? q.slice(0, 57) + "..." : q;
-          return `| ${num} | ${shortQ} | [Q${num}](q${num}) |`;
+          const shortLabel = extractShortLabel(q);
+          return `| ${num} | ${shortLabel} | [Q${num}](q${num}) |`;
         })
         .join("\n")
     : "| — | No questions captured yet. | — |";

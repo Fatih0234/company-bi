@@ -755,6 +755,46 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		lines.push("", "## Analysis intention", "", ...intentionLines);
 	}
 
+	// ── Data Access Rules (prominent, before source catalog) ──
+	lines.push("", "## Data Access Rules", "");
+	lines.push("There are **two separate SQL execution contexts**. Mixing them up is the #1 error in Evidence dashboard work.");
+
+	lines.push("", "### Context A: DuckDB BI Tools (ad-hoc exploration)");
+	lines.push("- Tools: `duckdb_run_sql`, `duckdb_summarize_table`, `duckdb_describe_table`, etc.");
+	lines.push("- CAN use file paths: `read_parquet('data/tlc/raw/yellow/*.parquet')`");
+	lines.push("- CAN use source names: `from trips` (auto-resolved by the tool)");
+	lines.push("- Use for: exploring data, running ad-hoc queries, profiling tables");
+	lines.push("- Output: terminal results, not rendered dashboard");
+
+	lines.push("", "### Context B: Evidence Page Queries (dashboard)");
+	lines.push("- Where: SQL blocks inside `pages/*.md` files (the ```sql fenced blocks)");
+	lines.push("- CANNOT use `read_parquet()`, `read_csv()`, `read_csv_auto()`, or file paths");
+	lines.push("- MUST use source names: `from trips`, `from zones`");
+	lines.push("- Output: rendered charts, tables, KPIs in the browser preview");
+
+	if (sourceCatalog.length) {
+		lines.push("", "### Available source names");
+		for (const item of sourceCatalog) {
+			lines.push(`- \`${item.name}\` — sources/${item.source}/${item.name}.sql`);
+		}
+
+		lines.push("", "### Converting a DuckDB tool query to a page query");
+		lines.push("When moving a query from `duckdb_run_sql` to a page, replace file references with source names:");
+		lines.push("```sql");
+		lines.push("-- DuckDB tool query (works in duckdb_run_sql, FAILS in page):");
+		lines.push("SELECT service_type, COUNT(*) FROM read_parquet('data/tlc/raw/yellow/*.parquet') GROUP BY 1");
+		lines.push("");
+		lines.push("-- Evidence page query (works in pages/*.md):");
+		lines.push("SELECT service_type, COUNT(*) FROM trips GROUP BY 1");
+		lines.push("```");
+	}
+
+	lines.push("", "### Rules");
+	lines.push("1. In page queries: ALWAYS use source names (`from trips`, `join zones`). NEVER use file paths.");
+	lines.push("2. In DuckDB tools: either works. Prefer source names for consistency.");
+	lines.push("3. Source names come from `sources/*/*.sql` — the filename (without .sql) is the table name.");
+	lines.push("4. If unsure, read the source SQL first to understand available columns and join keys.");
+
 	lines.push("", "## Dynamic data source context", "");
 	if (plugins.length) {
 		lines.push(`- Evidence datasource plugins enabled by evidence.config.yaml: ${plugins.join(", ")}`);
@@ -768,7 +808,11 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		lines.push("", "### Source query catalog", "");
 		for (const item of sourceCatalog) {
 			lines.push(`- ${item.source}.${item.name}`);
-			lines.push(`  - File: ${contentMode ? `runtime:${item.file}` : item.file}`);
+			if (contentMode) {
+			lines.push(`  - File: ${runtimeRoot}/${item.file}`);
+		} else {
+			lines.push(`  - File: ${item.file}`);
+		}
 			lines.push(`  - Inferred columns: ${renderList(item.columns)}`);
 			lines.push(`  - Likely time fields: ${renderList(item.timeFields)}`);
 			lines.push(`  - Likely measures: ${renderList(item.measures)}`);
@@ -779,8 +823,31 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		lines.push("", "### Source query catalog", "", "No source query SQL files were found under sources/*/*.sql.");
 	}
 
+
 	const profileLines = renderCachedProfile(root);
 	if (profileLines.length) lines.push("", ...profileLines);
+
+	lines.push(
+		"",
+		"## Evidence component reference",
+		"",
+		"Component props, options, and detailed examples are in the OSS documentation. **Never guess props — look them up.**",
+		"",
+		"**Documentation location:** `.agent/docs/evidence-oss/`",
+		"- `ROUTES.md` — task-based routing (start here)",
+		"- `INDEX.md` — full component map with doc paths and quick reference",
+		"",
+		"**How to look up a component:**",
+		"1. Read `.agent/docs/evidence-oss/ROUTES.md` for the task",
+		"2. Follow the link to the specific component doc",
+		"3. Read the doc at: `/Users/fatihkarahan/.opensrc/repos/github.com/evidence-dev/evidence/main/sites/docs/pages/`",
+		"4. Use `<Component>` syntax (OSS), not `{% %}` syntax (Studio)",
+		"",
+		"Common mistakes to avoid:",
+		"- `colorPalette` is for SERIES-level coloring. For per-bar colors on a simple chart, use `echartsOptions={{ color: [...] }}`.",
+		"- Evidence charts are built on ECharts. Use `echartsOptions` for advanced customization and `printEchartsConfig=true` to debug.",
+		"- Use `seriesOptions` (not `echartsOptions.series`) to apply options to ALL series at once.",
+	);
 
 	lines.push(
 		"",
@@ -790,6 +857,7 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		"- Connect dashboard elements back to the analysis intention and available source catalog.",
 		"- Keep data-source assumptions explicit. If a column or metric is only inferred, verify it before relying on it.",
 		"- Do not inspect or edit blocked secret/config files to learn data source details.",
+		"- NEVER use '<' or '&' in plain Markdown text (e.g. '<1,000', 'Q&A', 'x < y') — these crash the Svelte renderer with 'Expected valid tag name'. Use 'under', 'less than', 'and', or HTML entities instead. Code blocks and Evidence components (<DataTable>, <BarChart>) are safe.",
 	);
 
 	let context = lines.join("\n");

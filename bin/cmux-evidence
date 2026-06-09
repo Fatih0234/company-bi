@@ -977,7 +977,7 @@ def workspace_minimal_evidence_config(
             "shadowRuntimeRoot": str(shadow_root),
             "workspaceRoot": str(workspace_root),
             "registryPath": str(registry_path(root, root_config)),
-            "agentCommand": str(root / "bin" / "lumen-pi"),
+            "agentCommand": str(root / "bin" / "pi-full"),
             "devCommand": f"npm run dev -- --port {port}",
             "validateCommand": "npm run build",
         }
@@ -1004,7 +1004,7 @@ def shadow_evidence_config(
         shadow_root=shadow_root,
         root=root,
     )
-    config["agentCommand"] = str(root / "bin" / "lumen-pi")
+    config["agentCommand"] = str(root / "bin" / "pi-full")
     config["workspaceDir"] = str(workspace_root.parent)
     return config
 
@@ -1321,7 +1321,7 @@ def new_analysis(title: str, *, print_layout: bool = False, open_after_create: b
         {
             "projectId": pid,
             "port": port,
-            "agentCommand": "./bin/lumen-pi",
+            "agentCommand": "./bin/pi-full",
             "devCommand": f"npm run dev -- --port {port}",
             "url": url,
             "workspaceDir": str(workspaces_root),
@@ -1368,7 +1368,7 @@ def new_analysis(title: str, *, print_layout: bool = False, open_after_create: b
         copy_project_subdir(root, worktree_path, str(Path(".pi") / "themes"))
         copy_project_subdir(root, worktree_path, str(Path(".pi") / "settings.json"))
         copy_project_subdir(root, worktree_path, str(Path(".pi") / "package.json"))
-        copy_project_subdir(root, worktree_path, str(Path("bin") / "lumen-pi"))
+        copy_project_subdir(root, worktree_path, str(Path("bin") / "pi-full"))
         (worktree_path / ".cmux").mkdir(parents=True, exist_ok=True)
         (worktree_path / ".cmux" / "evidence.json").write_text(
             json.dumps(worktree_config, indent=2) + "\n"
