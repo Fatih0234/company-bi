@@ -40,6 +40,7 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
         (self.root / "sources" / "tlc" / "trips.sql").write_text("select 1 as trip_count\n")
         (self.root / ".evidence" / "template" / "static" / "data" / "manifest.json").write_text('{"cached": true}\n')
         (self.root / "bin" / "lumen-pi").write_text("#!/usr/bin/env bash\necho pi\n")
+        (self.root / "bin" / "pi-full").write_text("#!/usr/bin/env bash\necho pi\n")
         (self.root / "scripts" / "run_evidence_dev.sh").write_text("#!/usr/bin/env bash\necho dev\n")
 
         config = {
@@ -124,7 +125,7 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
 
         workspace_config = self.read_json(workspace / ".cmux" / "evidence.json")
         self.assertEqual(workspace_config["registryPath"], str(self.registry_path))
-        self.assertEqual(workspace_config["agentCommand"], str(self.root / "bin" / "lumen-pi"))
+        self.assertEqual(workspace_config["agentCommand"], str(self.root / "bin" / "pi-full"))
 
         self.assertTrue((shadow / "package.json").exists())
         self.assertTrue((shadow / "sources").exists())
@@ -150,7 +151,7 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
 
         self.assertEqual(agent["cwd"], str(self.workspace_dir / "split-root"))
         self.assertEqual(dev["cwd"], str(self.runtime_dir / "split-root"))
-        self.assertEqual(agent["command"], str(self.root / "bin" / "lumen-pi"))
+        self.assertEqual(agent["command"], str(self.root / "bin" / "pi-full"))
         self.assertEqual(dev["command"], "npm run dev -- --port 3900")
 
     def test_port_selection_uses_registry_not_only_workspace_files(self):

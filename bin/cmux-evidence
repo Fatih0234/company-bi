@@ -1211,9 +1211,17 @@ def new_content_analysis(title: str, *, print_layout: bool = False, open_after_c
         write_pi_context(workspace_root, metadata, workspace_config)
         # Symlink pi-pkg/ subdirectories into the workspace's .pi/ so the Pi agent
         # (running from workspace root) can discover skills, prompts, extensions,
-        # themes, and settings from the main project.  We symlink individual subdirs
-        # rather than the whole pi-pkg/ to avoid leaking project-level state like
-        # duckdb/ or todos/ into every workspace.
+        # themes, and settings from the main project.
+        #
+        # DESIGN NOTE: Skills, extensions, prompts, and themes are shared across all
+        # content workspaces via symlinks to the main project's pi-pkg/. This means
+        # updating a skill in pi-pkg/ immediately affects all workspaces. This is
+        # intentional — the workspace isolation is for user content (pages, queries,
+        # data), not for project-level tooling. If per-workspace isolation is needed
+        # in the future, change symlinks to copies.
+        #
+        # We symlink individual subdirs rather than the whole pi-pkg/ to avoid
+        # leaking project-level state like duckdb/ or todos/ into every workspace.
         workspace_pi = workspace_root / ".pi"
         workspace_pi.mkdir(parents=True, exist_ok=True)
         for _sub in ["skills", "prompts", "extensions", "themes"]:
@@ -2344,18 +2352,30 @@ def publish_content_workspace(target: Path, config: dict[str, Any], metadata: di
             print(f"- ... {len(data_files) - 20} more")
 
     try:
-        runtime, _runtime_config = load_project(runtime)
+        project_root, _runtime_config = load_project(runtime)
     except ValueError as exc:
         return error(str(exc))
+
+    if git_root(project_root) is None:
+        return error(
+            f"Publish requires a Git repository at the project root.\n"
+            f"Project root: {project_root}\n"
+            f"Run 'git init' in the project root and try again."
+        )
 
     if publish_root.exists() and not (publish_root / ".git").exists():
         shutil.rmtree(publish_root)
     if not publish_root.exists():
-        result = run_git(runtime, ["worktree", "add", "-B", branch, str(publish_root), base_branch], check=False)
+        result = run_git(project_root, ["worktree", "add", "-B", branch, str(publish_root), base_branch], check=False)
     else:
         result = run_git(publish_root, ["checkout", "-B", branch], check=False)
     if result.returncode != 0:
-        return error((result.stderr or result.stdout or "Failed to prepare publish worktree").strip())
+        return error(
+            f"Failed to prepare publish worktree.\n"
+            f"Project root: {project_root}\n"
+            f"Branch: {branch}\n"
+            f"Git output: {(result.stderr or result.stdout or '').strip()}"
+        )
 
     target_report_dir = publish_root / "pages" / "reports" / slug
     target_queries_dir = publish_root / "queries" / slug
