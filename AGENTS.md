@@ -1,18 +1,58 @@
 # AGENTS.md
 
-## Indexed external sources
+## Post-Implementation Registration Rule
 
-Before answering questions about indexed external sources, read the matching `.agent/repos/<name>/INDEX.md` navigation layer first.
+**CRITICAL: After implementing any new extension, skill, prompt template, or theme, you MUST register it in `pi-pkg/package.json` under the appropriate `pi` section.**
 
-- **pi** — Pi Agent Harness Mono Repo: pi.dev domain graciously donated by. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/earendil-works/pi/main`. Agent index: `.agent/repos/pi/INDEX.md`
-- **cmux** — الميزات: > تمت هذه الترجمة بواسطة Claude. إذا كانت لديك اقتراحات للتحسين، يرجى فتح PR. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/manaflow-ai/cmux/main`. Agent index: `.agent/repos/cmux/INDEX.md`
-- **evidence** — [Docs](https://docs.evidence.dev) | [Examples](https://evidence.dev/examples) | [Slack](https://slack.evidence.dev): Business Intelligence as Code: Generate reports using SQL and m. Source: `/Users/fatihkarahan/.opensrc/repos/github.com/evidence-dev/evidence/main`. Agent index: `.agent/repos/evidence/INDEX.md`
+### Why This Matters
 
-## Indexed documentation sources
+- The `bin/lumen-pi` script loads extensions from `pi-pkg/` via `-e "$PROJECT_ROOT/pi-pkg"`
+- Workspaces inherit extensions from the root `pi-pkg/package.json`
+- If you don't register your implementation, it won't be loaded by Pi
+- This is a common source of "it works in isolation but not in the workspace" bugs
 
-Before answering questions or implementing against indexed external documentation, read the matching `.agent/docs/<name>/INDEX.md` navigation layer first.
+### Registration Locations
 
-- **evidence-studio** — Documentation source indexed from llms.txt. Source: `https://docs.evidence.studio/llms.txt`. Agent index: `.agent/docs/evidence-studio/INDEX.md`
-- **pi** — Documentation source scanned recursively from GitHub directory: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs. Source: `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs`. Agent index: `.agent/docs/pi/INDEX.md`
-- **github-com** — </div>. Source: `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs`. Agent index: `.agent/docs/github-com/INDEX.md`
-- **cmux-com** — Documentation source indexed from llms.txt. Source: `https://cmux.com/llms.txt`. Agent index: `.agent/docs/cmux-com/INDEX.md`
+| Asset Type | Registration Location |
+|------------|----------------------|
+| Extensions | `pi-pkg/package.json` → `pi.extensions` array |
+| Skills | `pi-pkg/package.json` → `pi.skills` array |
+| Prompt Templates | `pi-pkg/package.json` → `pi.prompts` array |
+| Themes | `pi-pkg/package.json` → `pi.themes` array |
+
+### Registration Format
+
+```json
+{
+  "pi": {
+    "extensions": [
+      "./extensions/existing-extension.ts",
+      "./extensions/new-extension"  // <-- Add here (directory or .ts file)
+    ],
+    "skills": [
+      "./skills/existing-skill",
+      "./skills/new-skill"  // <-- Add here
+    ]
+  }
+}
+```
+
+### Post-Implementation Checklist
+
+After implementing any new Pi asset:
+
+1. ✅ Asset created in `pi-pkg/extensions/`, `pi-pkg/skills/`, `pi-pkg/prompts/`, or `pi-pkg/themes/`
+2. ✅ Asset registered in `pi-pkg/package.json` under the correct `pi` section
+3. ✅ Tests pass (`npm test` in the asset directory)
+4. ✅ New workspaces will pick up the asset automatically
+5. ⚠️ Existing workspaces need manual sync or recreation
+
+### Common Mistakes to Avoid
+
+- ❌ Creating an extension but forgetting to register it
+- ❌ Registering with wrong path (e.g., `./extensions/new.ts` when it's a directory)
+- ❌ Not testing that the asset loads in a real workspace
+- ❌ Assuming existing workspaces will auto-update (they won't)
+
+---
+

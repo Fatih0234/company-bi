@@ -1,0 +1,31 @@
+{
+  "name": "evidence-quality-guard",
+  "version": "1.0.0",
+  "description": "Unified extension that prevents silent failures in Evidence dashboards",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./query-validator": "./query-validator.ts",
+    "./empty-dataset-detector": "./empty-dataset-detector.ts",
+    "./static-analysis": "./static-analysis.ts",
+    "./validation-engine": "./validation-engine.ts",
+    "./state-manager": "./state-manager.ts",
+    "./error-formatter": "./error-formatter.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "typebox": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

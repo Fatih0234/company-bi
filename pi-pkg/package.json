@@ -11,7 +11,8 @@
       "./extensions/analysis-intention",
       "./extensions/duckdb-bi",
       "./extensions/lumen-bi",
-      "./extensions/evidence-render-guard.ts"
+      "./extensions/evidence-health-check.ts",
+      "./extensions/evidence-quality-guard"
     ],
     "skills": [
       "./skills/evidence",
