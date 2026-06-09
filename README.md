@@ -143,12 +143,13 @@ bin/pi-full                        # Full Pi agent runs with CMUX integration
 .cmux/evidence.json                # project workspace configuration
 .cmux/cmux.json                    # CMUX palette actions
 
-pi-pkg/extensions/evidence-context.ts # Evidence context provider for Pi
+pi-pkg/extensions/evidence-context.ts      # Evidence context provider for Pi
 pi-pkg/extensions/evidence-health-check.ts  # Evidence build health checker
-pi-pkg/extensions/evidence-render-guard.ts  # Render safety guard for Evidence
-pi-pkg/extensions/analysis-intention/ # Analysis intention onboarding flow
-pi-pkg/extensions/duckdb-bi/          # DuckDB BI tools for data exploration
-pi-pkg/extensions/pi-ask-user/        # Interactive user input extension
+pi-pkg/extensions/evidence-quality-guard/   # Quality validation (queries, empty data, rendering)
+pi-pkg/extensions/analysis-intention/       # Analysis intention onboarding flow
+pi-pkg/extensions/duckdb-bi/                # DuckDB BI tools for data exploration
+pi-pkg/extensions/lumen-bi/                 # LUMEN BI workspace utilities
+pi-pkg/extensions/pi-ask-user/              # Interactive user input extension
 
 pi-pkg/skills/evidence/               # Evidence component reference skill
 pi-pkg/skills/evidence-bi-thinking/   # BI analysis methodology skill
@@ -164,5 +165,6 @@ sources/                           # Evidence source queries
 scripts/                           # local data/dev helpers
 implementation-docs/               # implementation plan history
 
-.evidence-bi-skill-refactor-pack/   # skill refactoring artifacts
+evidence-slides-integration-pack/   # Slides integration (skills, prompts, examples)
+docs/                              # Project documentation
 ```
