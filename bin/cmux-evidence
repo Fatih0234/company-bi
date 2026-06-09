@@ -1031,10 +1031,15 @@ def ensure_shadow_runtime(
         if source.exists():
             symlink_or_copy(source, shadow_root / rel)
 
-    for rel in ["sources", "scripts", "bin", "pi-pkg", "data"]:
+    for rel in ["scripts", "bin", "pi-pkg", "data"]:
         source = root / rel
         if source.exists():
             symlink_or_copy(source, shadow_root / rel)
+
+    # Do NOT symlink 'sources' from root — the shadow runtime needs its own
+    # sources/ directory for generated files (e.g., sources/files/*.sql from
+    # data refresh). Root sources are legacy/optional (now in examples/tlc/).
+    (shadow_root / "sources").mkdir(parents=True, exist_ok=True)
 
     # Reuse the main runtime's generated Evidence source/cache data when present.
     # Without this, content-only shadows that live outside the Git checkout cannot

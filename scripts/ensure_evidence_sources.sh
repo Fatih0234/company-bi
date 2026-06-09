@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# DEPRECATED: This script is retained for backward compatibility with legacy
+# workspaces that still use TLC/MinIO data sources. New workspaces should use
+# ensure_workspace_sources.sh (called automatically by run_evidence_dev.sh).
+#
+# TLC sources have been moved to examples/tlc/. To use them:
+#   cp -r examples/tlc/sources/tlc/ sources/tlc/
+#   npm run sources -- --sources tlc
 set -euo pipefail
 
 MANIFEST=".evidence/template/static/data/manifest.json"
