@@ -2602,44 +2602,82 @@ def usage() -> str:
 def data_command(args: list[str]) -> int:
     """Dispatch for 'cmux-evidence data ...' subcommands."""
     sub = args[0] if args else ""
+    rest = args[1:] if len(args) > 1 else []
+    # Extract optional workspace slug (last arg if it doesn't start with -)
+    slug = None
+    if rest and not rest[-1].startswith("-"):
+        slug = rest[-1]
     if sub == "list":
-        return data_list_command()
+        return data_list_command(slug)
     if sub == "refresh":
-        return data_refresh_command()
+        return data_refresh_command(slug)
     print(
-        "Usage: cmux-evidence data <subcommand>\n"
+        "Usage: cmux-evidence data <subcommand> [workspace-slug]\n"
         "\n"
         "Subcommands:\n"
         "  list      Show registered workspace data tables\n"
         "  refresh   Scan data files, update registry, generate source SQL\n"
+        "\n"
+        "If called from inside a workspace, the workspace is auto-detected.\n"
+        "If called from the project root, pass the workspace slug as the last argument.\n"
+        "Example:\n"
+        "  cmux-evidence data refresh my-analysis\n"
     )
     return 1
 
 
-def _resolve_workspace_root_for_data() -> Path:
+def _resolve_workspace_root_for_data(slug: str | None = None) -> Path:
     """Resolve workspace root for data commands.
 
-    Works from: content workspace root, or main project root (best-effort).
+    Works from: content workspace root, or main project root with a slug.
     """
     cwd = Path.cwd().resolve()
-    # If we are inside a content workspace (has .cmux/evidence.json), use cwd
-    if (cwd / ".cmux" / "evidence.json").exists():
+
+    # If a slug is provided, resolve from project root (skip cwd check)
+    if slug:
+        git_r = git_root(cwd)
+        if git_r:
+            try:
+                root, config = load_project(git_r)
+                candidates = []
+                workspaces_root = workspace_dir(root, config)
+                candidates.append(workspaces_root / slug)
+                configured_dir = str(config.get("workspaceDir", ""))
+                if configured_dir:
+                    expanded = Path(os.path.expanduser(configured_dir))
+                    if not expanded.is_absolute():
+                        expanded = root / expanded
+                    candidates.append(expanded / slug)
+                pid = project_id(root, config)
+                well_known = Path(f"~/.local/share/lumen-bi/workspaces/{pid}/{slug}").expanduser()
+                candidates.append(well_known)
+                for candidate in candidates:
+                    if candidate.is_dir() and (candidate / ".cmux" / "evidence.json").exists():
+                        return candidate
+            except (ValueError, OSError):
+                pass
+        return cwd  # fallback
+
+    # No slug: detect content workspace from cwd
+    # Must have BOTH .cmux/evidence.json AND .cmux/workspace.json
+    if (cwd / ".cmux" / "evidence.json").exists() and (cwd / ".cmux" / "workspace.json").exists():
         try:
             config = load_config(cwd / ".cmux" / "evidence.json")
             metadata = load_workspace_metadata(cwd) or {}
             if is_content_workspace(config, metadata):
-                workspace_root = Path(str(metadata.get("workspaceRoot" or cwd))).expanduser().resolve()
+                workspace_root = Path(str(metadata.get("workspaceRoot") or cwd)).expanduser().resolve()
                 return workspace_root
         except (ValueError, OSError):
             pass
+
     # Fallback: use cwd
     return cwd
 
 
-def data_list_command() -> int:
+def data_list_command(slug: str | None = None) -> int:
     """Show registered workspace data tables."""
     try:
-        workspace_root = _resolve_workspace_root_for_data()
+        workspace_root = _resolve_workspace_root_for_data(slug)
     except (TypeError, ValueError) as exc:
         return error(str(exc))
 
@@ -2668,13 +2706,24 @@ def data_list_command() -> int:
     return 0
 
 
-def data_refresh_command() -> int:
+def data_refresh_command(slug: str | None = None) -> int:
     """Scan workspace data, update registry, generate source SQL."""
     try:
-        workspace_root = _resolve_workspace_root_for_data()
-        target, config, metadata = workspace_target_config_metadata()
+        workspace_root = _resolve_workspace_root_for_data(slug)
     except (TypeError, ValueError) as exc:
         return error(str(exc))
+
+    # Load workspace metadata directly from the workspace
+    evidence_json = workspace_root / ".cmux" / "evidence.json"
+    if not evidence_json.exists():
+        return error(f"Not an Evidence workspace: {workspace_root}")
+
+    try:
+        config = load_config(evidence_json)
+    except (ValueError, OSError) as exc:
+        return error(str(exc))
+
+    metadata = load_workspace_metadata(workspace_root) or {}
 
     # Ensure data directory exists
     data_dir = wdr.workspace_data_dir(workspace_root)
