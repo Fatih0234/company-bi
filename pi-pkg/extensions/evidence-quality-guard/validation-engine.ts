@@ -13,7 +13,7 @@ import type {
   RenderingIssue,
   SqlBlock,
 } from './types.ts';
-import { StateManager } from './state-manager.ts';
+import { StateManager, getStateManager } from './state-manager.ts';
 import { extractSqlBlocks, validatePageContent } from './empty-dataset-detector.ts';
 import { analyzeEvidenceMarkdown, renderingIssuesToErrors } from './static-analysis.ts';
 import {
