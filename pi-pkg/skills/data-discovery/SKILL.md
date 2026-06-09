@@ -5,7 +5,14 @@ description: Discover and explain Evidence sources or project-local data using t
 
 # Data Discovery (DuckDB BI)
 
-Run this workflow when the user wants to understand an Evidence source or unknown data file. In this BI project, **prefer Evidence source SQL first** (`sources/*/*.sql`, exposed as names like `tlc.trips` and `tlc.zones`) because dashboards should be built on semantic sources, not raw files. Fall back to raw CSV/Parquet/JSON/DuckDB files when the source SQL is missing, broken, or the user explicitly asks for raw data. The goal is a **one-paragraph narrative** with cited findings and 2–3 follow-up questions — not a column inventory.
+Run this workflow when the user wants to understand an Evidence source or unknown data file. **Discovery priority order:**
+
+1. **Registered workspace tables** (`files.<alias>` from `.cmux/data-registry.json`) — preferred for dashboard analysis
+2. **Unregistered files** in `data/` — run `cmux-evidence data refresh` to register before dashboard use
+3. **Evidence source SQL** (`sources/*/*.sql`, e.g. `tlc.trips`) — valid if present
+4. **Scratch/exports** (`.pi/duckdb/**`) — only if explicitly relevant
+
+The goal is a **one-paragraph narrative** with cited findings and 2–3 follow-up questions — not a column inventory.
 
 The DuckDB BI tools (`duckdb_*`) are registered by the `duckdb-bi` extension in `.pi/extensions/duckdb-bi/`. Every SQL query they run is logged under `.pi/duckdb/audit/query-log.jsonl` with a `query_id`. **Cite `query_id`s in the narrative so results are reproducible.**
 
@@ -13,14 +20,14 @@ The DuckDB BI tools (`duckdb_*`) are registered by the `duckdb-bi` extension in 
 
 ### 1. Orient (skip if context is obvious)
 
-- `duckdb_data_sources` — see Evidence sources, business data files, aliases, and runtime artifact paths. Default `mode: "business"` intentionally ignores generated/internal dirs; use `mode: "all"` only when debugging discovery itself.
+- `duckdb_data_sources` — see **registered workspace tables** (`files.<alias>`), Evidence sources, business data files, aliases, and runtime artifact paths. Registered tables with `recommended_for_dashboard: true` are the preferred starting point.
 - `duckdb_query_audit_log` (limit 20) — don't re-discover what's already been run.
 
-If the user named an Evidence source or file directly, skip this and go to step 2.
+If the user named a registered table, Evidence source, or file directly, skip this and go to step 2.
 
 ### 2. Shape
 
-For each candidate table/source. Prefer names from `evidence_sources` (for example `tlc.trips`) over raw file aliases when the goal is dashboard analysis:
+For each candidate table/source. **Prefer registered workspace table names** (e.g. `files.orders`) over Evidence source names or raw file aliases when the goal is dashboard analysis:
 
 - `duckdb_describe_table` — column names and types.
 - `duckdb_sample_rows` (limit 5–10) — semantic content. **Type alone does not tell you what `Zone` means.**

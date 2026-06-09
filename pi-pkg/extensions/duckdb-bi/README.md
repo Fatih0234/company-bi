@@ -36,7 +36,7 @@ duckdb -version
 5. `duckdb_summarize_table` (now returns a `findings` array of interpretation hints)
 6. `duckdb_quality_report`
 7. `duckdb_export_query`
-8. `duckdb_data_sources` (Evidence-aware: lists `sources/*/*.sql` plus business data files)
+8. `duckdb_data_sources` (Evidence-aware: lists registered workspace tables from `.cmux/data-registry.json`, `sources/*/*.sql`, and business data files)
 9. `duckdb_make_report`
 10. `duckdb_query_audit_log`
 11. `duckdb_join_coverage` (new — check FK coverage in both directions; supports `auto_discover`)
@@ -78,9 +78,20 @@ Small fixture files are included:
 
 The file-discovery tools expose them through aliases `sales` and `customers` when running in a test root without a `data/` directory, or when `duckdb_data_sources` is called with `mode: "all"`.
 
+## Workspace Data Registry
+
+The `duckdb_data_sources` tool integrates with the workspace data registry (`.cmux/data-registry.json`) to surface registered workspace tables as first-class dashboard sources.
+
+When a workspace has registered tables:
+- Registered tables appear as `registered_tables` with `recommended_for_dashboard: true`
+- Unregistered files appear as `files` with `recommended_for_dashboard: false` and a registration hint
+- Evidence sources continue to appear alongside registered tables
+
+The registry is maintained by `cmux-evidence data refresh` (CLI) or can be read directly by the `workspace-data-registry.ts` module.
+
 ## Companion skill: `data-discovery`
 
-A project-local skill at `.pi/skills/data-discovery/SKILL.md` packages the "first pass on an Evidence source or unknown data file" workflow. It auto-loads when the user asks to "discover", "explore", "understand", "what is in", or "audit" data, and walks the agent through orient → shape → identify kind → quality → join coverage → narrative → persist. In this Evidence BI project, it prefers semantic source SQL names such as `tlc.trips` over raw file aliases for dashboard analysis.
+A project-local skill at `.pi/skills/data-discovery/SKILL.md` packages the "first pass on an Evidence source or unknown data file" workflow. It auto-loads when the user asks to "discover", "explore", "understand", "what is in", or "audit" data, and walks the agent through orient → shape → identify kind → quality → join coverage → narrative → persist. Discovery priority: registered workspace tables > unregistered files > Evidence source SQL > scratch/exports.
 
 The skill cites `query_id`s, leads with a one-line summary, and ends with 2–3 follow-up questions rather than a stats dump. Run `npm test` to validate the skill's frontmatter and the duckdb-* tool names it references.
 
@@ -100,6 +111,10 @@ Use DuckDB BI tools to describe, sample, summarize, and quality-check the sales 
 
 ```txt
 Export revenue by region from sales.csv as CSV and create a Markdown BI report.
+```
+
+```txt
+Show me the registered workspace tables and their schemas.
 ```
 
 ## Automated tests

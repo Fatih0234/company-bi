@@ -19,12 +19,15 @@ Use this skill when working in the company-bi Evidence dashboard workspace.
 
 ## Data Access
 
-- **Page queries** (SQL blocks in `pages/*.md`) MUST use source names: `from trips`, `from zones`
-- **Never** use `read_parquet()`, `read_csv()`, or file paths in page queries
-- **Source names** are defined in `sources/*/*.sql` — the filename without `.sql` is the table name
+- **Page queries** (SQL blocks in `pages/*.md`) MUST use registered workspace table names such as `files.orders`, `files.customers`
+- **Never** use `read_parquet()`, `read_csv()`, `read_csv_auto()`, or raw file paths in page queries
+- **Registered tables** come from the workspace data registry (`.cmux/data-registry.json`), generated as `files.<alias>` source tables
 - Source details and available columns are in the Dynamic Evidence Context (injected each turn)
-- **DuckDB BI tools** (`duckdb_run_sql`) auto-resolve source names too — use them for consistency
+- Use `duckdb_data_sources` to discover registered tables and their schemas
+- **DuckDB BI tools** (`duckdb_run_sql`) can use either file paths or source names — prefer source names for consistency
 - When moving a query from `duckdb_run_sql` to a page, replace file references with source names
+- If data files exist in `data/` but no registered tables are available, run `cmux-evidence data refresh` before writing dashboard queries
+- Legacy Evidence sources from `sources/*/*.sql` (e.g. `tlc.trips`) are also valid if present
 
 ## Workspace model
 

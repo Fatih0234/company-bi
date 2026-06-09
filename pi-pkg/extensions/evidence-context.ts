@@ -701,6 +701,83 @@ function renderCmuxWorkspaceContext(url: string, helperCommand = "./bin/cmux-evi
 	return lines;
 }
 
+function buildWorkspaceRegistryContext(root: string, contentMode: boolean): string[] {
+	const registryPath = join(root, ".cmux", "data-registry.json");
+	const registryData = safeReadJson(registryPath);
+
+	if (!registryData || typeof registryData !== "object" || !Array.isArray((registryData as Record<string, unknown>).tables)) {
+		// No registry — check if data files exist
+		const dataDir = join(root, "data");
+		if (existsSync(dataDir)) {
+			try {
+				const entries = readdirSync(dataDir).filter((e) => !e.startsWith(".") && (e.endsWith(".csv") || e.endsWith(".tsv") || e.endsWith(".parquet") || e.endsWith(".json") || e.endsWith(".jsonl")));
+				if (entries.length > 0) {
+					return [
+						"## Workspace data",
+						"",
+						"Workspace data files are present but not registered. Run `cmux-evidence data refresh` before building dashboard queries.",
+						"",
+						"Discovered files:",
+						...entries.map((e) => `\t- data/${e}`),
+					];
+				}
+			} catch {
+				// ignore
+			}
+		}
+		return [];
+	}
+
+	const data = registryData as Record<string, unknown>;
+	const tables = data.tables as Array<Record<string, unknown>>;
+	const readyTables = tables.filter((t) => t.status === "ready");
+	const missingTables = tables.filter((t) => t.status === "missing");
+
+	if (!readyTables.length && !missingTables.length) {
+		return [
+			"## Workspace data",
+			"",
+			"No workspace data registered yet. Ask the user to add files under data/ or run data refresh after files are added.",
+		];
+	}
+
+	const lines = ["## Workspace data", ""];
+
+	if (readyTables.length) {
+		lines.push("Registered tables:");
+		for (const t of readyTables) {
+			const alias = String(t.alias || "?");
+			const qualifiedName = String(t.qualifiedName || `files.${alias}`);
+			const filePath = String(t.path || "?");
+			const format = String(t.format || "?");
+			const status = String(t.status || "?");
+			const rowCount = typeof t.rowCount === "number" ? t.rowCount.toLocaleString() : "?";
+			lines.push(`\t- ${qualifiedName} \u2014 ${filePath}, ${format}, ${status}, ${rowCount} rows`);
+			if (Array.isArray(t.columns) && t.columns.length) {
+				const colNames = t.columns.map((c: Record<string, unknown>) => String(c.name || "?")).join(", ");
+				lines.push(`\t  Columns: ${colNames}`);
+			}
+		}
+	}
+
+	if (missingTables.length) {
+		lines.push("", "Missing/removed tables:");
+		for (const t of missingTables) {
+			lines.push(`\t- ${String(t.qualifiedName || t.alias)} \u2014 ${String(t.path)} (file no longer exists)`);
+		}
+	}
+
+	lines.push(
+		"",
+		"Rules:",
+		"- Use registered table names like files.orders in Evidence page SQL.",
+		"- Do not use read_csv_auto(), read_parquet(), read_json_auto(), or raw file paths in dashboard pages.",
+		"- If files exist in data/ but no registered tables exist, run workspace data refresh first.",
+	);
+
+	return lines;
+}
+
 function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 	if (!root) return "";
 
@@ -761,15 +838,15 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 
 	lines.push("", "### Context A: DuckDB BI Tools (ad-hoc exploration)");
 	lines.push("- Tools: `duckdb_run_sql`, `duckdb_summarize_table`, `duckdb_describe_table`, etc.");
-	lines.push("- CAN use file paths: `read_parquet('data/tlc/raw/yellow/*.parquet')`");
-	lines.push("- CAN use source names: `from trips` (auto-resolved by the tool)");
+	lines.push("- CAN use file paths: `read_csv_auto('data/orders.csv')`, `read_parquet('data/events.parquet')`");
+	lines.push("- CAN use source names: `from files.orders`, `from files.customers` (auto-resolved by the tool)");
 	lines.push("- Use for: exploring data, running ad-hoc queries, profiling tables");
 	lines.push("- Output: terminal results, not rendered dashboard");
 
 	lines.push("", "### Context B: Evidence Page Queries (dashboard)");
 	lines.push("- Where: SQL blocks inside `pages/*.md` files (the ```sql fenced blocks)");
 	lines.push("- CANNOT use `read_parquet()`, `read_csv()`, `read_csv_auto()`, or file paths");
-	lines.push("- MUST use source names: `from trips`, `from zones`");
+	lines.push("- MUST use registered source names: `from files.orders`, `from files.customers`");
 	lines.push("- Output: rendered charts, tables, KPIs in the browser preview");
 
 	if (sourceCatalog.length) {
@@ -779,21 +856,21 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 		}
 
 		lines.push("", "### Converting a DuckDB tool query to a page query");
-		lines.push("When moving a query from `duckdb_run_sql` to a page, replace file references with source names:");
+		lines.push("When moving a query from `duckdb_run_sql` to a page, replace file references with registered source names:");
 		lines.push("```sql");
 		lines.push("-- DuckDB tool query (works in duckdb_run_sql, FAILS in page):");
-		lines.push("SELECT service_type, COUNT(*) FROM read_parquet('data/tlc/raw/yellow/*.parquet') GROUP BY 1");
+		lines.push("SELECT customer_id, SUM(revenue) FROM read_csv_auto('data/orders.csv') GROUP BY 1");
 		lines.push("");
 		lines.push("-- Evidence page query (works in pages/*.md):");
-		lines.push("SELECT service_type, COUNT(*) FROM trips GROUP BY 1");
+		lines.push("SELECT customer_id, SUM(revenue) FROM files.orders GROUP BY 1");
 		lines.push("```");
 	}
 
 	lines.push("", "### Rules");
-	lines.push("1. In page queries: ALWAYS use source names (`from trips`, `join zones`). NEVER use file paths.");
+	lines.push("1. In page queries: ALWAYS use registered source names (e.g. `from files.orders`). NEVER use file paths.");
 	lines.push("2. In DuckDB tools: either works. Prefer source names for consistency.");
-	lines.push("3. Source names come from `sources/*/*.sql` — the filename (without .sql) is the table name.");
-	lines.push("4. If unsure, read the source SQL first to understand available columns and join keys.");
+	lines.push("3. Source names come from the workspace data registry (`.cmux/data-registry.json`) or `sources/*/*.sql`.");
+	lines.push("4. If unsure, inspect the data with DuckDB tools first to understand available columns and join keys.");
 
 	lines.push("", "## Dynamic data source context", "");
 	if (plugins.length) {
@@ -826,6 +903,10 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 
 	const profileLines = renderCachedProfile(root);
 	if (profileLines.length) lines.push("", ...profileLines);
+
+	// ── Workspace Data Registry context ──
+	const registryLines = buildWorkspaceRegistryContext(root, contentMode);
+	if (registryLines.length) lines.push("", ...registryLines);
 
 	lines.push(
 		"",

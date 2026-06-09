@@ -18,6 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Ensure the scripts directory is importable for workspace_data_registry
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import workspace_data_registry as wdr
+
 
 DEFAULT_PORT = 3000
 DEFAULT_ANALYSIS_BASE_PORT = 3100
@@ -2584,6 +2590,155 @@ def usage() -> str:
 """.rstrip()
 
 
+# ---------------------------------------------------------------------------
+# data subcommands
+# ---------------------------------------------------------------------------
+
+def data_command(args: list[str]) -> int:
+    """Dispatch for 'cmux-evidence data ...' subcommands."""
+    sub = args[0] if args else ""
+    if sub == "list":
+        return data_list_command()
+    if sub == "refresh":
+        return data_refresh_command()
+    print(
+        "Usage: cmux-evidence data <subcommand>\n"
+        "\n"
+        "Subcommands:\n"
+        "  list      Show registered workspace data tables\n"
+        "  refresh   Scan data files, update registry, generate source SQL\n"
+    )
+    return 1
+
+
+def _resolve_workspace_root_for_data() -> Path:
+    """Resolve workspace root for data commands.
+
+    Works from: content workspace root, or main project root (best-effort).
+    """
+    cwd = Path.cwd().resolve()
+    # If we are inside a content workspace (has .cmux/evidence.json), use cwd
+    if (cwd / ".cmux" / "evidence.json").exists():
+        try:
+            config = load_config(cwd / ".cmux" / "evidence.json")
+            metadata = load_workspace_metadata(cwd) or {}
+            if is_content_workspace(config, metadata):
+                workspace_root = Path(str(metadata.get("workspaceRoot" or cwd))).expanduser().resolve()
+                return workspace_root
+        except (ValueError, OSError):
+            pass
+    # Fallback: use cwd
+    return cwd
+
+
+def data_list_command() -> int:
+    """Show registered workspace data tables."""
+    try:
+        workspace_root = _resolve_workspace_root_for_data()
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    registry = wdr.load_data_registry(workspace_root)
+    tables = registry.get("tables", [])
+    if not tables:
+        # Check if there are unregistered files
+        files = wdr.scan_workspace_data_files(workspace_root)
+        if files:
+            print(
+                "Workspace data files exist but are not registered.\n"
+                "Run:\n"
+                "  cmux-evidence data refresh\n"
+            )
+        else:
+            print(
+                "No workspace data files found.\n\n"
+                "Supported formats:\n"
+                "  .csv, .tsv, .parquet, .json, .jsonl\n\n"
+                "Add files under data/ and run:\n"
+                "  cmux-evidence data refresh"
+            )
+        return 0
+
+    print(wdr.print_list_summary(registry))
+    return 0
+
+
+def data_refresh_command() -> int:
+    """Scan workspace data, update registry, generate source SQL."""
+    try:
+        workspace_root = _resolve_workspace_root_for_data()
+        target, config, metadata = workspace_target_config_metadata()
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    # Ensure data directory exists
+    data_dir = wdr.workspace_data_dir(workspace_root)
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Refresh registry
+    registry = wdr.refresh_workspace_data_registry(workspace_root)
+
+    # Resolve shadow runtime root
+    is_content = is_content_workspace(config, metadata)
+    if is_content:
+        shadow_root_value = metadata.get("shadowRuntimeRoot") or config.get("shadowRuntimeRoot")
+        if not shadow_root_value:
+            return error("Content-only workspace metadata is missing shadowRuntimeRoot")
+        shadow_root = Path(str(shadow_root_value)).expanduser().resolve()
+        root_value = metadata.get("runtimeRoot") or config.get("runtimeRoot")
+        if not root_value:
+            return error("Content-only workspace metadata is missing runtimeRoot")
+        root = Path(str(root_value)).expanduser().resolve()
+    else:
+        shadow_root = workspace_root
+        root = workspace_root
+
+    # Ensure shadow runtime exists
+    try:
+        ensure_shadow_runtime(
+            root=root,
+            config=config,
+            workspace_root=workspace_root,
+            shadow_root=shadow_root,
+            metadata=metadata,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"Warning: shadow runtime setup issue: {exc}", file=sys.stderr)
+
+    # Generate source SQL files
+    ready_tables = [t for t in registry.get("tables", []) if t.get("status") == "ready"]
+    if ready_tables:
+        wdr.generate_workspace_file_sources(workspace_root, shadow_root, registry)
+
+    # Print summary
+    print(wdr.print_registry_summary(registry))
+
+    # Run Evidence sources for files if ready tables exist
+    if ready_tables:
+        sources_dir = shadow_root / "sources" / wdr.GENERATED_FILES_SOURCE_NAME
+        if sources_dir.is_dir():
+            print()
+            print("Running Evidence source extraction...")
+            try:
+                result = subprocess.run(
+                    ["npm", "run", "sources", "--", "--sources", wdr.GENERATED_FILES_SOURCE_NAME],
+                    cwd=str(shadow_root),
+                    check=False,
+                    text=True,
+                    capture_output=True,
+                )
+                if result.returncode == 0:
+                    print("Evidence sources updated successfully.")
+                else:
+                    print(f"Warning: Evidence source extraction returned {result.returncode}")
+                    if result.stderr:
+                        print(result.stderr[:500])
+            except OSError as exc:
+                print(f"Warning: could not run Evidence sources: {exc}")
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     print_layout = False
@@ -2648,6 +2803,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "publish":
         return publish_command()
+
+    if command == "data":
+        return data_command(args[1:])
 
     return open_workspace(command, print_layout=print_layout)
 

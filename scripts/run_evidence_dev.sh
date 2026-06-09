@@ -79,6 +79,12 @@ ensure_port_free() {
 }
 
 ensure_node_modules
-scripts/ensure_evidence_sources.sh
+
+# Prefer the generic workspace sources script; fall back to legacy TLC script.
+if [[ -x "scripts/ensure_workspace_sources.sh" ]]; then
+  scripts/ensure_workspace_sources.sh
+elif [[ -x "scripts/ensure_evidence_sources.sh" ]]; then
+  scripts/ensure_evidence_sources.sh
+fi
 ensure_port_free "$(extract_port "$@" || true)"
 exec evidence dev "$@"

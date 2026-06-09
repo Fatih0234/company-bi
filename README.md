@@ -17,8 +17,27 @@ You describe what you want to analyze. The agent explores your data,
 builds charts and KPIs, and you see the results live. When the dashboard
 is ready, you publish it.
 
-The data behind the project is a slice of NYC TLC taxi trip data (yellow
-+ green), with a zones lookup, synced from a local MinIO bucket via DuckDB.
+## Quick start
+
+```bash
+# 1. Install
+npm install
+
+# 2. Create an analysis workspace
+./bin/cmux-evidence new "Sales performance"
+
+# 3. Drop your data files into the workspace
+cp ~/your-data/orders.csv ~/.local/share/lumen-bi/workspaces/company-bi/sales-performance/data/
+cp ~/your-data/customers.csv ~/.local/share/lumen-bi/workspaces/company-bi/sales-performance/data/
+
+# 4. Register your data
+cd ~/.local/share/lumen-bi/workspaces/company-bi/sales-performance
+./bin/cmux-evidence data refresh
+
+# 5. Open the workspace and ask Pi to analyze
+./bin/cmux-evidence open sales-performance
+# Then in Pi: "Analyze revenue by customer segment and region"
+```
 
 ## How it works
 
@@ -31,20 +50,52 @@ pages/index.md      ← workspace brief and goal
 pages/draft.md      ← private exploration sandbox
 pages/report.md     ← polished dashboard (published)
 queries/             ← reusable analysis SQL
-data/                ← local input files
+data/                ← your local data files (CSV, Parquet, JSON, etc.)
 reports/             ← published report output
+.cmux/               ← workspace metadata + data registry
 ```
 
 The Evidence app, node_modules, extensions, and runtime code live in a
 separate hidden directory. You never see or edit them.
 
+### Supported data formats
+
+| Format | Extension | Example |
+|--------|-----------|---------|
+| CSV | `.csv` | `orders.csv` |
+| TSV | `.tsv` | `events.tsv` |
+| Parquet | `.parquet` | `sales.parquet` |
+| JSON | `.json` | `config.json` |
+| JSON Lines | `.jsonl` | `logs.jsonl` |
+
+### The data registry
+
+When you run `cmux-evidence data refresh`, the system:
+
+1. Scans your `data/` directory for supported files
+2. Creates stable table aliases (e.g., `data/orders.csv` → `files.orders`)
+3. Generates Evidence source SQL in the shadow runtime
+4. Registers everything in `.cmux/data-registry.json`
+
+Dashboard pages then use stable source names:
+
+```sql
+-- ✅ Correct — uses registered source name
+SELECT region, SUM(revenue) FROM files.orders GROUP BY 1
+
+-- ❌ Wrong — raw file path (won't work in Evidence pages)
+SELECT region, SUM(revenue) FROM read_csv_auto('data/orders.csv') GROUP BY 1
+```
+
 ### The workflow
 
 ```text
-1. Create    → cmux-evidence new "Revenue by Zone"
-2. Explore   → agent queries data, you see charts in the browser
-3. Refine    → agent builds draft, you give feedback
-4. Publish   → cmux-evidence publish (report + queries → review branch)
+1. Create    → cmux-evidence new "Revenue by Region"
+2. Add data  → copy CSV/Parquet/JSON files into data/
+3. Register  → cmux-evidence data refresh
+4. Explore   → agent queries data, you see charts in the browser
+5. Refine    → agent builds draft, you give feedback
+6. Publish   → cmux-evidence publish (report + queries → review branch)
 ```
 
 ### The three-pane workspace
@@ -98,6 +149,13 @@ between "I wrote a chart" and "the chart looks right."
 
 ## Commands
 
+### Data management
+
+```bash
+./bin/cmux-evidence data list               # show registered tables
+./bin/cmux-evidence data refresh            # scan files, update registry, generate sources
+```
+
 ### Create and open
 
 ```bash
@@ -125,7 +183,7 @@ between "I wrote a chart" and "the chart looks right."
 
 ```text
 bin/
-  cmux-evidence              CLI — workspace lifecycle (new/open/validate/publish)
+  cmux-evidence              CLI — workspace lifecycle (new/open/validate/publish/data)
   pi-full                    Pi agent launcher (local + global resources)
   lumen-pi                   Pi launcher (isolated, no global resources)
 
@@ -135,20 +193,24 @@ pi-pkg/                      Pi package — extensions, skills, prompts, themes
   prompts/                   Prompt templates
   themes/                    LUMEN midnight theme
 
-sources/                     Evidence source SQL (tlc.trips, tlc.zones)
-pages/                       Evidence dashboard pages
-scripts/                     Data pipeline and dev helpers
+scripts/
+  workspace_data_registry.py Core registry logic (scan, refresh, source generation)
+  ensure_workspace_sources.sh Generic source bootstrap (replaces TLC-specific script)
+  run_evidence_dev.sh        Dev server launcher
 
-evidence-slides-integration-pack/   Slide generation from BI reports
+sources/                     Evidence source SQL
+pages/                       Evidence dashboard pages
+
+examples/                    Optional demo data (e.g., TLC taxi trips)
 ```
 
 ## Extensions
 
 | Extension | What it does |
 |-----------|-------------|
-| `evidence-context` | Injects workspace state, source catalog, and CMUX anchors into each agent turn |
+| `evidence-context` | Injects workspace state, source catalog, and data registry into each agent turn |
 | `analysis-intention` | Iterative interview to capture the analysis goal, questions, and success criteria |
-| `duckdb-bi` | DuckDB tools for safe, audited data exploration |
+| `duckdb-bi` | DuckDB tools for safe, audited data exploration + workspace data registry reader |
 | `evidence-quality-guard` | Multi-layer validation to prevent silent dashboard failures |
 | `evidence-health-check` | Dev server health checker — catches build errors before screenshots |
 | `lumen-bi` | LUMEN branded TUI header |
@@ -196,6 +258,11 @@ npm run dev
 
 Opens at <http://localhost:3000>.
 
+## Examples
+
+See `examples/` for optional demo datasets including NYC TLC taxi trips
+synced from MinIO. These are not required for normal workspace usage.
+
 ## Local generated state
 
 These are local-only and ignored by Git:
@@ -203,6 +270,7 @@ These are local-only and ignored by Git:
 ```text
 .cmux/registry.json
 .cmux/workspace.json
+.cmux/data-registry.json
 .evidence/
 build/
 node_modules/
