@@ -153,7 +153,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
       const errorMessage = validationEngine.formatResult(false, result, staticErrors);
       
       return {
-        content: errorMessage,
+        content: [{ type: 'text', text: errorMessage }],
         isError: true,
       };
     }
