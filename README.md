@@ -6,6 +6,7 @@ Company BI is an Evidence dashboard project with a CMUX/Pi workspace workflow fo
 
 - Evidence app for local BI dashboards
 - `cmux-evidence` helper CLI for CMUX workspace launch and analysis lifecycle
+- `pi-full` for full Pi agent runs with CMUX integration
 - Clean per-analysis workspaces with `pages/`, `queries/`, `reports/`, and `data/`
 - Hidden generated Evidence runtimes for preview/build
 - Per-analysis metadata, Pi context, browser preview helpers, validation, content diff, and publish commands
@@ -136,13 +137,32 @@ node_modules/
 ## Project structure
 
 ```text
-bin/cmux-evidence              # CMUX/Evidence workspace CLI
-.cmux/evidence.json            # project workspace configuration
-.cmux/cmux.json                # CMUX palette actions
-.pi/skills/evidence-dashboard  # project-local Pi skill
-.pi/prompts/                   # Pi prompt templates
-pages/                         # Evidence pages
-sources/                       # Evidence sources
-scripts/                       # local data/dev helpers
-implementation-docs/           # implementation plan history
+bin/cmux-evidence                  # CMUX/Evidence workspace CLI
+bin/pi-full                        # Full Pi agent runs with CMUX integration
+
+.cmux/evidence.json                # project workspace configuration
+.cmux/cmux.json                    # CMUX palette actions
+
+.pi/extensions/evidence-context.ts # Evidence context provider for Pi
+.pi/extensions/evidence-health-check.ts  # Evidence build health checker
+.pi/extensions/evidence-render-guard.ts  # Render safety guard for Evidence
+.pi/extensions/analysis-intention/ # Analysis intention onboarding flow
+.pi/extensions/duckdb-bi/          # DuckDB BI tools for data exploration
+.pi/extensions/pi-ask-user/        # Interactive user input extension
+
+.pi/skills/evidence/               # Evidence component reference skill
+.pi/skills/evidence-bi-thinking/   # BI analysis methodology skill
+.pi/skills/evidence-dashboard/     # Evidence dashboard build skill
+.pi/skills/evidence-dashboard-review/  # Dashboard review/QA skill
+.pi/skills/data-discovery/         # Data source discovery skill
+.pi/skills/ask-user/               # Decision handshake skill
+
+.pi/prompts/                       # Pi prompt templates
+
+pages/                             # Evidence pages
+sources/                           # Evidence source queries
+scripts/                           # local data/dev helpers
+implementation-docs/               # implementation plan history
+
+.evidence-bi-skill-refactor-pack/   # skill refactoring artifacts
 ```
