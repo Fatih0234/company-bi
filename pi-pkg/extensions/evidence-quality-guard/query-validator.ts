@@ -232,11 +232,23 @@ export function extractValidationFromResponse(
 }
 
 /**
- * Parse a duckdb_run_sql result from tool_result content.
+ * Parse a duckdb_run_sql result from tool_result details.
+ * Accepts either a string (JSON) or an object (already parsed).
  */
-export function parseDuckDbResponse(content: string): DuckDbRunSqlResponse | null {
+export function parseDuckDbResponse(
+  details: string | Record<string, unknown>,
+): DuckDbRunSqlResponse | null {
   try {
-    const response = JSON.parse(content);
+    let response: unknown;
+    
+    if (typeof details === 'string') {
+      response = JSON.parse(details);
+    } else if (typeof details === 'object' && details !== null) {
+      response = details;
+    } else {
+      return null;
+    }
+    
     if (typeof response === 'object' && response !== null && 'row_count' in response) {
       return response as DuckDbRunSqlResponse;
     }

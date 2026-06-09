@@ -24,7 +24,7 @@ import {
 
 export class StateManager {
   private cache: QueryCache;
-  private pi: ExtensionAPI;
+  pi: ExtensionAPI;
   private initialized = false;
   
   constructor(pi: ExtensionAPI) {
@@ -125,10 +125,14 @@ let instance: StateManager | null = null;
 
 /**
  * Get or create the singleton StateManager instance.
+ * Updates the pi reference if the extension is reloaded with a new session.
  */
 export function getStateManager(pi: ExtensionAPI): StateManager {
   if (!instance) {
     instance = new StateManager(pi);
+  } else {
+    // Update pi reference when extension is reloaded (new session)
+    instance.pi = pi;
   }
   return instance;
 }

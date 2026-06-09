@@ -111,7 +111,8 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     }
     
     // Parse the response
-    const response = parseDuckDbResponse(event.content);
+    // event.details contains the actual data object (not content array)
+    const response = parseDuckDbResponse(event.details);
     if (!response) {
       return;
     }

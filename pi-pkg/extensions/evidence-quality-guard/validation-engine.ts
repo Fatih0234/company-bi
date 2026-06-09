@@ -26,7 +26,7 @@ import {
 
 export class ValidationEngine {
   private stateManager: StateManager;
-  private pi: ExtensionAPI;
+  pi: ExtensionAPI;
   
   constructor(pi: ExtensionAPI) {
     this.pi = pi;
@@ -139,7 +139,7 @@ export class ValidationEngine {
         lines.push(`#### Query: \`${block.name}\``);
         lines.push('');
         lines.push('```sql');
-        lines.push(block.sql);
+        lines.push(block.content);
         lines.push('```');
         lines.push('');
         lines.push('Run this via `duckdb_run_sql` with the SQL above.');
@@ -171,10 +171,14 @@ let instance: ValidationEngine | null = null;
 
 /**
  * Get or create the singleton ValidationEngine instance.
+ * Updates the pi reference if the extension is reloaded with a new session.
  */
 export function getValidationEngine(pi: ExtensionAPI): ValidationEngine {
   if (!instance) {
     instance = new ValidationEngine(pi);
+  } else {
+    // Update pi reference when extension is reloaded (new session)
+    instance.pi = pi;
   }
   return instance;
 }
