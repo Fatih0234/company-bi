@@ -33,10 +33,10 @@ connection.options.yaml
 
 # Local agent/index state
 .agent/
-.pi/duckdb/
-.pi/todos/
-.pi/skills/cmux/
-.pi/skills/cmux-*/
+pi-pkg/duckdb/
+pi-pkg/todos/
+pi-pkg/skills/cmux/
+pi-pkg/skills/cmux-*/
 
 # Python cache
 __pycache__/

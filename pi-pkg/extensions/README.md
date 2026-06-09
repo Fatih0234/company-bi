@@ -32,13 +32,13 @@ Surfaces:
 
 Project-local DuckDB BI tools for safe, audited data exploration.
 
-Registers bounded `duckdb_*` LLM-callable tools for readonly SQL, Evidence-aware table discovery, schema/sample/profile checks, data quality reports, join coverage checks, exports, Markdown reports, and query audit log reads. The tools execute DuckDB through argument-array `spawn()` calls, validate project-local paths, block destructive SQL by default, and write runtime artifacts only under `.pi/duckdb/`.
+Registers bounded `duckdb_*` LLM-callable tools for readonly SQL, Evidence-aware table discovery, schema/sample/profile checks, data quality reports, join coverage checks, exports, Markdown reports, and query audit log reads. The tools execute DuckDB through argument-array `spawn()` calls, validate project-local paths, block destructive SQL by default, and write runtime artifacts only under `.pi/duckdb/` (inside each workspace's own `.pi/` directory).
 
 For this Evidence BI project, discovery defaults to semantic sources under `sources/*/*.sql` plus business files under `data/`, while generated/internal directories such as `.agent/`, `.cmux/`, `.evidence/`, `.pi/`, `.workspaces/`, and `.minio-data/` are excluded unless the agent explicitly requests all-mode discovery. Evidence source SQL can be addressed directly by names such as `tlc.trips` or `tlc.zones`.
 
 The companion `data-discovery` skill at `.pi/skills/data-discovery/SKILL.md` packages a repeatable discovery workflow: orient → shape → identify table kind → quality → join coverage → narrative → optional persistence. Use it when profiling CSV, Parquet, JSON/JSONL, or DuckDB files.
 
-Runtime outputs are intentionally local and ignored by Git via `.pi/duckdb/`; the extension source, tests, fixtures, and skill are the project resources that should be copied into generated Evidence workspaces.
+Runtime outputs are intentionally local and ignored by Git via `.pi/duckdb/` (workspace-local); the extension source, tests, fixtures, and skill live under `pi-pkg/` and are symlinked into generated Evidence workspaces.
 
 ## `lumen-bi/`
 
@@ -53,7 +53,7 @@ Behavior:
 
 The header is a static block-letter LUMEN mark (uniform cyan with a muted baseline). It deliberately does not animate — a previous animated version triggered a `pi-tui` scrollback-clearing code path whenever the conversation grew taller than the terminal, so the logo is now rendered once at session start.
 
-The project-local `.pi/settings.json` selects the LUMEN theme:
+The project-local `pi-pkg/settings.json` selects the LUMEN theme (symlinked into each workspace's `.pi/settings.json`):
 
 ```json
 {
@@ -61,14 +61,14 @@ The project-local `.pi/settings.json` selects the LUMEN theme:
 }
 ```
 
-Generated Evidence workspaces copy this extension, the theme directory, `.pi/settings.json`, and `.pi/package.json`.
+Generated Evidence workspaces symlink this extension, the theme directory, `settings.json`, and `package.json` from `pi-pkg/` into the workspace's `.pi/`.
 
 ## App package and isolated launcher
 
 The project-local Pi package lives at:
 
 ```text
-.pi/package.json
+pi-pkg/package.json
 ```
 
 It bundles the LUMEN/Evidence resources used for dashboard-building sessions:
@@ -89,8 +89,10 @@ Use the app launcher instead of plain `pi` for dashboard-agent sessions:
 The launcher runs Pi with global resource discovery disabled and loads only this app package:
 
 ```bash
-pi --no-extensions --no-skills --no-prompt-templates --no-themes -e ./.pi
+pi --no-extensions --no-skills --no-prompt-templates --no-themes -e ./pi-pkg
 ```
+
+**Important:** The Pi package lives at `pi-pkg/` (not `.pi/`) so that running bare `pi` from the project root does NOT auto-discover project extensions/skills. This lets developers build the tool without the tools loading into their session.
 
 It also stores sessions under `.cmux/pi-sessions` for this project/worktree.
 

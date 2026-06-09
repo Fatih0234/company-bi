@@ -942,11 +942,11 @@ def copy_project_subdir(project_root: Path, worktree_path: Path, relative_path: 
 
 
 def copy_project_skill(project_root: Path, worktree_path: Path, skill_name: str) -> None:
-    copy_project_subdir(project_root, worktree_path, str(Path(".pi") / "skills" / skill_name))
+    copy_project_subdir(project_root, worktree_path, str(Path("pi-pkg") / "skills" / skill_name))
 
 
 def copy_project_extension(project_root: Path, worktree_path: Path, extension_name: str) -> None:
-    copy_project_subdir(project_root, worktree_path, str(Path(".pi") / "extensions" / extension_name))
+    copy_project_subdir(project_root, worktree_path, str(Path("pi-pkg") / "extensions" / extension_name))
 
 
 def prompt_line(label: str, *, default: str = "") -> str:
@@ -1025,7 +1025,7 @@ def ensure_shadow_runtime(
         if source.exists():
             symlink_or_copy(source, shadow_root / rel)
 
-    for rel in ["sources", "scripts", "bin", ".pi", "data"]:
+    for rel in ["sources", "scripts", "bin", "pi-pkg", "data"]:
         source = root / rel
         if source.exists():
             symlink_or_copy(source, shadow_root / rel)
@@ -1209,6 +1209,23 @@ def new_content_analysis(title: str, *, print_layout: bool = False, open_after_c
         )
         write_json(workspace_root / ".cmux" / "evidence.json", workspace_config)
         write_pi_context(workspace_root, metadata, workspace_config)
+        # Symlink pi-pkg/ subdirectories into the workspace's .pi/ so the Pi agent
+        # (running from workspace root) can discover skills, prompts, extensions,
+        # themes, and settings from the main project.  We symlink individual subdirs
+        # rather than the whole pi-pkg/ to avoid leaking project-level state like
+        # duckdb/ or todos/ into every workspace.
+        workspace_pi = workspace_root / ".pi"
+        workspace_pi.mkdir(parents=True, exist_ok=True)
+        for _sub in ["skills", "prompts", "extensions", "themes"]:
+            _src = root / "pi-pkg" / _sub
+            _dst = workspace_pi / _sub
+            if _src.exists() and not _dst.exists():
+                _dst.symlink_to(_src, target_is_directory=True)
+        for _file in ["settings.json", "package.json"]:
+            _src = root / "pi-pkg" / _file
+            _dst = workspace_pi / _file
+            if _src.exists() and not _dst.exists():
+                _dst.symlink_to(_src)
         write_content_snapshot(workspace_root, workspace_config, "initial")
         ensure_shadow_runtime(root=root, config=config, workspace_root=workspace_root, shadow_root=shadow_root, metadata=metadata)
         upsert_workspace_registry(registry_file=registry_file, project_id_value=pid, project_root=root, workspace=metadata)
@@ -1351,7 +1368,7 @@ def new_analysis(title: str, *, print_layout: bool = False, open_after_create: b
         for skill_name in [
             "evidence-dashboard",
             "evidence-dashboard-review",
-            "evidence-data-semantics",
+            "evidence-slides",
             "data-discovery",
             "cmux-workspace",
             "cmux-browser",
@@ -1365,9 +1382,9 @@ def new_analysis(title: str, *, print_layout: bool = False, open_after_create: b
         copy_project_extension(root, worktree_path, "analysis-intention")
         copy_project_extension(root, worktree_path, "duckdb-bi")
         copy_project_extension(root, worktree_path, "lumen-bi")
-        copy_project_subdir(root, worktree_path, str(Path(".pi") / "themes"))
-        copy_project_subdir(root, worktree_path, str(Path(".pi") / "settings.json"))
-        copy_project_subdir(root, worktree_path, str(Path(".pi") / "package.json"))
+        copy_project_subdir(root, worktree_path, str(Path("pi-pkg") / "themes"))
+        copy_project_subdir(root, worktree_path, str(Path("pi-pkg") / "settings.json"))
+        copy_project_subdir(root, worktree_path, str(Path("pi-pkg") / "package.json"))
         copy_project_subdir(root, worktree_path, str(Path("bin") / "pi-full"))
         (worktree_path / ".cmux").mkdir(parents=True, exist_ok=True)
         (worktree_path / ".cmux" / "evidence.json").write_text(

@@ -3,9 +3,13 @@ set -euo pipefail
 
 # Launch Pi as the LUMEN Evidence BI assistant for this project/worktree.
 #
-# Loads the project-local .pi package with global Pi resource discovery disabled
+# Loads the project-local pi-pkg package with global Pi resource discovery disabled
 # (extensions, skills, prompts, themes). Provider/model/auth settings still come
 # from the normal Pi settings stack unless explicitly overridden by the user.
+#
+# NOTE: The Pi package lives at pi-pkg/ (not .pi/) so that running bare `pi` from
+# the project root does NOT auto-discover project extensions/skills.  This lets
+# developers build the tool without the tools loading into their session.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -26,5 +30,5 @@ exec pi \
   --no-prompt-templates \
   --no-themes \
   --session-dir "$SESSION_DIR" \
-  -e "$PROJECT_ROOT/.pi" \
+  -e "$PROJECT_ROOT/pi-pkg" \
   "$@"

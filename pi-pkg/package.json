@@ -17,6 +17,8 @@
       "./skills/evidence",
       "./skills/evidence-dashboard",
       "./skills/evidence-dashboard-review",
+      "./skills/evidence-bi-thinking",
+      "./skills/evidence-slides",
       "./skills/data-discovery",
       "./skills/cmux-workspace",
       "./skills/cmux-browser",
@@ -25,7 +27,10 @@
       "./skills/ask-user"
     ],
     "prompts": [
-      "./prompts/evidence-dashboard.md"
+      "./prompts/evidence-dashboard.md",
+      "./prompts/slides-from-report.md",
+      "./prompts/slides-storyboard.md",
+      "./prompts/slides-review.md"
     ],
     "themes": [
       "./themes/lumen-bi-midnight.json"

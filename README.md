@@ -143,21 +143,21 @@ bin/pi-full                        # Full Pi agent runs with CMUX integration
 .cmux/evidence.json                # project workspace configuration
 .cmux/cmux.json                    # CMUX palette actions
 
-.pi/extensions/evidence-context.ts # Evidence context provider for Pi
-.pi/extensions/evidence-health-check.ts  # Evidence build health checker
-.pi/extensions/evidence-render-guard.ts  # Render safety guard for Evidence
-.pi/extensions/analysis-intention/ # Analysis intention onboarding flow
-.pi/extensions/duckdb-bi/          # DuckDB BI tools for data exploration
-.pi/extensions/pi-ask-user/        # Interactive user input extension
+pi-pkg/extensions/evidence-context.ts # Evidence context provider for Pi
+pi-pkg/extensions/evidence-health-check.ts  # Evidence build health checker
+pi-pkg/extensions/evidence-render-guard.ts  # Render safety guard for Evidence
+pi-pkg/extensions/analysis-intention/ # Analysis intention onboarding flow
+pi-pkg/extensions/duckdb-bi/          # DuckDB BI tools for data exploration
+pi-pkg/extensions/pi-ask-user/        # Interactive user input extension
 
-.pi/skills/evidence/               # Evidence component reference skill
-.pi/skills/evidence-bi-thinking/   # BI analysis methodology skill
-.pi/skills/evidence-dashboard/     # Evidence dashboard build skill
-.pi/skills/evidence-dashboard-review/  # Dashboard review/QA skill
-.pi/skills/data-discovery/         # Data source discovery skill
-.pi/skills/ask-user/               # Decision handshake skill
+pi-pkg/skills/evidence/               # Evidence component reference skill
+pi-pkg/skills/evidence-bi-thinking/   # BI analysis methodology skill
+pi-pkg/skills/evidence-dashboard/     # Evidence dashboard build skill
+pi-pkg/skills/evidence-dashboard-review/  # Dashboard review/QA skill
+pi-pkg/skills/data-discovery/         # Data source discovery skill
+pi-pkg/skills/ask-user/               # Decision handshake skill
 
-.pi/prompts/                       # Pi prompt templates
+pi-pkg/prompts/                       # Pi prompt templates
 
 pages/                             # Evidence pages
 sources/                           # Evidence source queries
