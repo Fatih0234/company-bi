@@ -10,14 +10,27 @@ import type { RenderingIssue } from './types.ts';
 // ── Known Valid Components ──────────────────────────────────────────
 
 const EVIDENCE_COMPONENTS = new Set([
+  // Charts
   'BigValue', 'BarChart', 'LineChart', 'AreaChart', 'BubbleChart', 'CalendarHeatmap',
   'FunnelChart', 'Histogram', 'PieChart', 'ScatterPlot', 'ReferenceLine', 'ReferenceArea',
-  'SankeyChart', 'DataTable', 'Grid', 'Tabs', 'Accordion', 'Alert', 'Button', 'CodeBlock',
-  'Dropdown', 'DimensionGrid', 'DownloadData', 'EmailInput', 'LinkButton', 'MultiSelect',
-  'MonthRange', 'NumberInput', 'Pagination', 'QueryViewer', 'ResetButton', 'SearchBar',
-  'Select', 'Sidebar', 'Slider', 'Spacing', 'Tag', 'TextInput', 'Toggle', 'URLInput',
-  'DateRange', 'LastRefreshed', 'Info', 'MissingValue', 'ValueError', 'CategoricalLegend',
-  'ContinuousLegend', 'Legend',
+  'ReferencePoint', 'SankeyChart', 'BoxPlot', 'USMap', 'AreaMap', 'BaseMap', 'BubbleMap',
+  // Chart sub-components
+  'Areas', 'Bubbles', 'Points', 'Value',
+  // Data components
+  'DataTable', 'Column', 'Grid',
+  // UI components
+  'Tabs', 'Tab', 'Accordion', 'Alert', 'Button', 'ButtonGroup', 'ButtonGroupItem',
+  'Callout', 'Checkbox', 'CodeBlock', 'DimensionGrid', 'DownloadData',
+  // Form components
+  'DateInput', 'DateRange', 'Dropdown', 'EmailInput', 'MultiSelect', 'MonthRange',
+  'NumberInput', 'Pagination', 'SearchBar', 'Select', 'Slider', 'TextInput', 'URLInput',
+  // Content components
+  'Info', 'LinkButton', 'MissingValue', 'QueryViewer', 'ResetButton', 'Sidebar',
+  'Spacing', 'Tag', 'TextInput', 'Toggle', 'ValueError',
+  // Legend components
+  'CategoricalLegend', 'ContinuousLegend', 'Legend',
+  // Utility components
+  'LastRefreshed',
 ]);
 
 const HTML_TAGS = new Set([
@@ -324,19 +337,21 @@ function analyzeMarkdownSyntax(content: string): RenderingIssue[] {
         });
       }
       
-      // Check for invalid HTML tags
+      // Check for HTML tags (only Evidence components are allowed in markdown)
       const tagRegex = /<([a-zA-Z][a-zA-Z0-9_-]*)/g;
       while ((match = tagRegex.exec(text)) !== null) {
         const tagName = match[1];
-        if (EVIDENCE_COMPONENTS.has(tagName) || HTML_TAGS.has(tagName.toLowerCase())) {
+        // Only Evidence components are allowed in markdown
+        // ALL other HTML tags (even valid ones like <div>) will crash Svelte
+        if (EVIDENCE_COMPONENTS.has(tagName)) {
           continue;
         }
         const snippet = text.slice(match.index, Math.min(match.index + 15, text.length));
         issues.push({
           line: i + 1,
-          message: `'${snippet}' will be parsed as an invalid HTML tag by the Svelte renderer`,
-          fixHint: `Use '${snippet}' only inside code blocks, or avoid '<' in plain text`,
-          severity: 'warning',
+          message: `'${snippet}' will crash the Svelte renderer - HTML tags are not supported in Evidence markdown`,
+          fixHint: `Use Evidence components instead of HTML tags, or wrap in code blocks`,
+          severity: 'error',
         });
       }
       

@@ -38,7 +38,11 @@ export function extractSqlBlocks(content: string): SqlBlock[] {
     // Start of SQL block
     if (line.startsWith('```sql')) {
       inSqlBlock = true;
-      currentBlockName = line.replace(/^```sql\s*/, '').trim();
+      let rawName = line.replace(/^```sql\s*/, '').trim();
+      // Strip query= prefix if present (e.g., "query=service_summary" → "service_summary")
+      currentBlockName = rawName.startsWith('query=') 
+        ? rawName.slice(6) 
+        : rawName;
       currentBlockStart = i + 1; // 1-indexed
       currentBlockContent = '';
       continue;

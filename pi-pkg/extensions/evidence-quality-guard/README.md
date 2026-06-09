@@ -235,6 +235,49 @@ The extension is lightweight:
 - Query validation: ~0.1ms per query lookup
 - No external processes spawned
 
+## Recent Fixes (June 2026)
+
+### Bug Fixes
+
+| Commit | Fix | Root Cause |
+|--------|-----|------------|
+| `1ccfae7` | Cache persistence across sessions | Singleton retained stale `pi` reference after extension reload on session switch |
+| `1ccfae7` | `block.sql` → `block.content` in error messages | `SqlBlock` interface uses `content` property, not `sql` |
+| `1ccfae7` | `parseDuckDbResponse` accepts `event.details` | `event.content` is an array of content blocks, not the data object |
+| `4296f56` | Intercept `bash` tool for file writes | Agent could bypass validation using `cat > file` via bash |
+| `4296f56` | Show exact SQL in error messages | Agent didn't know which SQL to run |
+| `5a56241` | Return `content` as array in `tool_result` | Pi expects `[{ type: 'text', text: '...' }]` format |
+| `1fdee2e` | Import `getStateManager` function | Missing import caused runtime error |
+
+### SQL Block Name Parsing
+
+The extension now correctly handles `query=` prefixes in SQL blocks:
+
+```markdown
+```sql query=service_summary
+SELECT ... 
+```
+```
+
+Previously, the block name was stored as `query=service_summary`. Now it correctly extracts `service_summary`.
+
+### Stricter HTML Tag Validation
+
+All HTML tags (even valid ones like `<div>`) will crash the Svelte renderer in Evidence markdown. The extension now:
+
+- Flags ALL HTML tags as errors (not just invalid ones)
+- Only allows Evidence components (e.g., `<DataTable>`, `<BarChart>`)
+- Changed severity from `warning` to `error`
+
+### Testing
+
+Run the regression test suite:
+
+```bash
+# In workspace the-new-entrants-nyc-playbook16
+# Follow pages/quality-guard-test.md step by step
+```
+
 ## License
 
 MIT
