@@ -2,11 +2,10 @@
   "type": "evidence",
   "projectId": "company-bi",
   "port": 3000,
-  "agentCommand": "./bin/lumen-pi",
-  "devCommand": "npm run dev",
+  "agentCommand": "/Volumes/T7/projects/company-bi/bin/pi-full",
+  "devCommand": "npm run dev -- --port 3000",
   "url": "http://localhost:3000",
-  "workspaceDir": ".workspaces",
-  "registryPath": ".cmux/registry.json",
+  "registryPath": "/Volumes/T7/projects/company-bi/.cmux/registry.json",
   "workspaceMode": "content-only",
   "runtimeDir": "~/.local/share/lumen-bi/runtime/company-bi",
   "analysisBasePort": 3100,
@@ -16,8 +15,36 @@
     "model": "mimo-v2.5-free",
     "thinking": "medium"
   },
-  "contentVisiblePaths": ["pages/**", "queries/**", "reports/**", "data/**"],
-  "allowedAgentPaths": ["pages/**", "queries/**", "reports/**", "data/**", ".cmux/workspace.json", ".cmux/data-profile.json", ".pi/duckdb/**"],
-  "askBeforeAgentPaths": ["sources/**", "components/**"],
-  "blockedAgentPaths": [".env*", "**/connection.yaml", ".github/**", "package.json", "package-lock.json", "bin/**", "scripts/**", ".pi/extensions/**"]
+  "contentVisiblePaths": [
+    "pages/**",
+    "queries/**",
+    "reports/**",
+    "data/**"
+  ],
+  "allowedAgentPaths": [
+    "pages/**",
+    "queries/**",
+    "reports/**",
+    "data/**",
+    ".cmux/workspace.json",
+    ".cmux/data-profile.json",
+    ".pi/duckdb/**"
+  ],
+  "askBeforeAgentPaths": [
+    "sources/**",
+    "components/**"
+  ],
+  "blockedAgentPaths": [
+    ".env*",
+    "**/connection.yaml",
+    ".github/**",
+    "package.json",
+    "package-lock.json",
+    "bin/**",
+    "scripts/**",
+    ".pi/extensions/**"
+  ],
+  "runtimeRoot": "/Volumes/T7/projects/company-bi",
+  "shadowRuntimeRoot": "/Volumes/T7/projects/company-bi",
+  "workspaceRoot": "/Volumes/T7/projects/company-bi"
 }
