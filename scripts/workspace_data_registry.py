@@ -320,9 +320,8 @@ def generate_workspace_file_sources(
     files_dir = shadow_root / "sources" / GENERATED_FILES_SOURCE_NAME
     files_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate connection.yaml
+    # Generate connection.yaml (no comment header — Evidence YAML parser rejects it)
     connection_content = (
-        f"{GENERATED_HEADER}\n"
         f"name: {GENERATED_FILES_SOURCE_NAME}\n"
         f"type: duckdb\n"
         f"options:\n"
