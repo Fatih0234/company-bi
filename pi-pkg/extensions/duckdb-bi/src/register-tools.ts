@@ -11,6 +11,7 @@ import { registerDataSourcesTool } from "./tools/data-sources";
 import { registerMakeReportTool } from "./tools/make-report";
 import { registerQueryAuditLogTool } from "./tools/query-audit-log";
 import { registerJoinCoverageTool } from "./tools/join-coverage";
+import { registerDataAttachCommand } from "./tools/data-attach";
 
 export function registerDuckDbBiTools(pi: ExtensionAPI, config: DuckDbBiConfig) {
   registerRunSqlTool(pi, config);
@@ -24,4 +25,5 @@ export function registerDuckDbBiTools(pi: ExtensionAPI, config: DuckDbBiConfig) 
   registerMakeReportTool(pi, config);
   registerQueryAuditLogTool(pi, config);
   registerJoinCoverageTool(pi, config);
+  registerDataAttachCommand(pi);
 }
