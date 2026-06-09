@@ -41,7 +41,43 @@ const TOOL_NAMES = {
   duckdbRunSql: 'duckdb_run_sql',
   write: 'write',
   edit: 'edit',
+  bash: 'bash',
 } as const;
+
+// ── Bash Command Patterns ─────────────────────────────────────────
+
+/**
+ * Extract target file paths from a bash command that writes to files.
+ */
+function extractTargetFilesFromCommand(command: string): string[] {
+  const files: string[] = [];
+  
+  // cat > file or cat > file << 'EOF'
+  const catMatch = command.match(/cat\s*(?:-[aA])?\s*>\s*([^\s<]+)/);
+  if (catMatch) files.push(catMatch[1]);
+  
+  // echo "..." > file
+  const echoMatch = command.match(/echo\s["']?.*["']?\s*>\s*([^\s<]+)/);
+  if (echoMatch) files.push(echoMatch[1]);
+  
+  // tee file
+  const teeMatch = command.match(/tee\s+([^\s<]+)/);
+  if (teeMatch) files.push(teeMatch[1]);
+  
+  // cp source dest (only if dest is .md in pages/)
+  const cpMatch = command.match(/cp\s+\S+\s+(\S+)/);
+  if (cpMatch) files.push(cpMatch[1]);
+  
+  // mv source dest (only if dest is .md in pages/)
+  const mvMatch = command.match(/mv\s+\S+\s+(\S+)/);
+  if (mvMatch) files.push(mvMatch[1]);
+  
+  // printf '...' > file
+  const printfMatch = command.match(/printf\s["']?.*["']?\s*>\s*([^\s<]+)/);
+  if (printfMatch) files.push(printfMatch[1]);
+  
+  return files;
+}
 
 // ── Main Extension ──────────────────────────────────────────────────
 
@@ -112,25 +148,21 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
   
   // ── Validate Page Writes ────────────────────────────────────────
   
-  pi.on('tool_result', async (event, ctx) => {
-    // Only process write/edit tools
-    if (event.toolName !== TOOL_NAMES.write && event.toolName !== TOOL_NAMES.edit) {
-      return;
-    }
-    
-    const filePath = event.input?.path;
-    if (!filePath || typeof filePath !== 'string') {
-      return;
-    }
-    
+  /**
+   * Validate a page file and return error if validation fails.
+   */
+  async function validateAndBlockIfNeeded(
+    filePath: string,
+    ctx: ExtensionContext,
+  ): Promise<{ allowed: boolean; response?: { content: Array<{ type: string; text: string }>; isError: boolean } }> {
     // Only validate .md files in pages/ directories
     if (!filePath.endsWith('.md') || !filePath.includes('/pages/')) {
-      return;
+      return { allowed: true };
     }
     
     // Check if file exists
     if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-      return;
+      return { allowed: true };
     }
     
     // Read the file content
@@ -138,7 +170,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     try {
       content = readFileSync(filePath, 'utf8');
     } catch {
-      return;
+      return { allowed: true };
     }
     
     // Run validation
@@ -149,17 +181,24 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     );
     
     if (!allowed) {
-      // BLOCK: Return error
-      const errorMessage = validationEngine.formatResult(false, result, staticErrors);
+      // BLOCK: Return error with EXACT instructions
+      const errorMessage = validationEngine.formatResultWithInstructions(
+        filePath,
+        content,
+        result,
+        staticErrors,
+      );
       
       return {
-        content: [{ type: 'text', text: errorMessage }],
-        isError: true,
+        allowed: false,
+        response: {
+          content: [{ type: 'text', text: errorMessage }],
+          isError: true,
+        },
       };
     }
     
     // PASSED: Allow write to proceed
-    // Optionally log success
     if (ctx.hasUI) {
       const stats = stateManager.getStats();
       const sqlBlocks = extractSqlBlocks(content);
@@ -169,6 +208,36 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
           `✅ Page validated (${sqlBlocks.length} queries, ${stats.totalQueries} cached)`,
           'info',
         );
+      }
+    }
+    
+    return { allowed: true };
+  }
+  
+  pi.on('tool_result', async (event, ctx) => {
+    // Process write/edit tools
+    if (event.toolName === TOOL_NAMES.write || event.toolName === TOOL_NAMES.edit) {
+      const filePath = event.input?.path;
+      if (!filePath || typeof filePath !== 'string') {
+        return;
+      }
+      
+      const { allowed, response } = await validateAndBlockIfNeeded(filePath, ctx);
+      if (!allowed && response) {
+        return response;
+      }
+    }
+    
+    // Process bash tool calls that write to .md files
+    if (event.toolName === TOOL_NAMES.bash) {
+      const command = event.input?.command || '';
+      const targetFiles = extractTargetFilesFromCommand(command);
+      
+      for (const filePath of targetFiles) {
+        const { allowed, response } = await validateAndBlockIfNeeded(filePath, ctx);
+        if (!allowed && response) {
+          return response;
+        }
       }
     }
   });

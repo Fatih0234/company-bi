@@ -106,6 +106,63 @@ export class ValidationEngine {
     
     return 'Unknown validation error';
   }
+  
+  /**
+   * Format validation result with EXACT instructions for the agent.
+   * This shows the exact SQL to run and the exact command to use.
+   */
+  formatResultWithInstructions(
+    filePath: string,
+    content: string,
+    result?: ValidationResult,
+    staticErrors?: RenderingIssue[],
+  ): string {
+    const lines: string[] = [];
+    
+    lines.push('## ❌ PAGE WRITE BLOCKED — Follow These Steps Exactly');
+    lines.push('');
+    lines.push('You CANNOT write this page until you complete these steps:');
+    lines.push('');
+    lines.push('### Step 1: Run Each Query via `duckdb_run_sql`');
+    lines.push('');
+    lines.push('Copy and run EXACTLY these commands (one by one):');
+    lines.push('');
+    
+    // Extract SQL blocks from the page
+    const sqlBlocks = extractSqlBlocks(content);
+    
+    for (const block of sqlBlocks) {
+      const isUnvalidated = result?.unvalidatedBlocks.includes(block.name);
+      const isEmpty = result?.emptyBlocks.includes(block.name);
+      
+      if (isUnvalidated || isEmpty) {
+        lines.push(`#### Query: \`${block.name}\``);
+        lines.push('');
+        lines.push('```sql');
+        lines.push(block.sql);
+        lines.push('```');
+        lines.push('');
+        lines.push('Run this via `duckdb_run_sql` with the SQL above.');
+        lines.push('');
+      }
+    }
+    
+    lines.push('### Step 2: Re-write the Page');
+    lines.push('');
+    lines.push('After running ALL queries above, write the page again.');
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    
+    // Add the detailed error info
+    if (staticErrors && staticErrors.length > 0) {
+      lines.push(formatStaticAnalysisErrors(staticErrors));
+    } else if (result) {
+      lines.push(formatValidationErrors(result));
+    }
+    
+    return lines.join('\n');
+  }
 }
 
 // ── Singleton Instance ──────────────────────────────────────────────
