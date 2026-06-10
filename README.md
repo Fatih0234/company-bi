@@ -201,7 +201,9 @@ scripts/
 sources/                     Evidence source SQL
 pages/                       Evidence dashboard pages
 
-examples/                    Optional demo data (e.g., TLC taxi trips)
+examples/
+  tlc/                       Optional demo data (NYC TLC taxi trips)
+  swiftride/                 Showcase: complete market entry analysis + slides
 ```
 
 ## Extensions
@@ -258,10 +260,63 @@ npm run dev
 
 Opens at <http://localhost:3000>.
 
+## Showcase: SwiftRide NYC Market Entry Playbook
+
+A complete, real-world analysis produced in a **single goal-driven session**.
+A ride-hailing startup (SwiftRide) needed a data-driven market entry
+strategy for NYC. Using 9M+ taxi trips from Jan–Mar 2024, the agent
+answered 7 strategic questions, built an executive report, and generated
+a 17-slide presentation deck — all without manual intervention between steps.
+
+### What was produced
+
+| Output | Description |
+|--------|-------------|
+| 7 analysis pages | Zone strategy, time strategy, competitive positioning, trip profiles, April trends, airport analysis, weekend patterns |
+| Executive report | 50-driver deployment playbook with risk register and Plan B |
+| Slide deck | 17-slide self-contained HTML presentation (1920×1080, keyboard nav) |
+| Storyboard | Slide-by-slide narrative with evidence traceability to source queries |
+
+### Dashboard screenshots
+
+**Q1: Zone Strategy** — Green taxi gap zones where yellow cabs are weaker:
+
+![Zone Strategy](examples/swiftride/images/q1-zone-strategy.png)
+
+**Q3: Competitive Positioning** — Yellow taxi dominance across Manhattan:
+
+![Competitive Positioning](examples/swiftride/images/q3-competitive-positioning.png)
+
+**Q7: Weekend vs Weekday** — Hourly demand curves showing different patterns:
+
+![Weekend vs Weekday](examples/swiftride/images/q7-weekend-vs-weekday.png)
+
+### How it was produced
+
+The analysis was generated using Pi's **goal feature** — a one-shot workflow
+where the agent receives a detailed objective with acceptance criteria and
+runs to completion:
+
+```text
+/create-goal "Complete all 7 SwiftRide market entry questions (Q1–Q7)
+with data-backed findings, synthesize into report.md, and generate
+a self-contained HTML slide deck following the evidence-slides skill."
+```
+
+The goal intake captures success criteria, verification evidence,
+constraints, and blocked-stop conditions. The agent iterates through
+the questions, validates SQL, checks dashboard health, and produces
+the final deck — stopping only when every criterion is met.
+
+See [`examples/swiftride/`](examples/swiftride/) for the full artifact set
+including the report, slides, storyboard, and goal intake document.
+
 ## Examples
 
-See `examples/` for optional demo datasets including NYC TLC taxi trips
-synced from MinIO. These are not required for normal workspace usage.
+See `examples/` for optional demo datasets and showcase analyses:
+
+- [`examples/tlc/`](examples/tlc/) — NYC TLC taxi trip data (optional demo dataset)
+- [`examples/swiftride/`](examples/swiftride/) — Complete SwiftRide market entry analysis (showcase)
 
 ## Local generated state
 

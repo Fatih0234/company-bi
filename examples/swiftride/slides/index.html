@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>SwiftRide NYC Market Entry Playbook</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+.deck-stage { width: 1920px; height: 1080px; position: relative; margin: 0 auto; transform-origin: top left; }
+.slide { width: 1920px; height: 1080px; position: absolute; top: 0; left: 0; display: none; padding: 80px 120px; background: #0f172a; }
+.slide.active { display: flex; flex-direction: column; justify-content: center; }
+.slide-number { position: absolute; bottom: 40px; right: 80px; font-size: 18px; color: #64748b; }
+h1 { font-size: 72px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; color: #f8fafc; }
+h2 { font-size: 56px; font-weight: 700; line-height: 1.2; margin-bottom: 32px; color: #f8fafc; }
+h3 { font-size: 36px; font-weight: 600; margin-bottom: 24px; color: #94a3b8; }
+p { font-size: 32px; line-height: 1.5; color: #cbd5e1; margin-bottom: 24px; }
+.subtitle { font-size: 36px; color: #3b82f6; font-weight: 500; margin-bottom: 48px; }
+.kpi-row { display: flex; gap: 40px; margin: 40px 0; }
+.kpi-card { background: #1e293b; border-radius: 16px; padding: 40px; flex: 1; border: 1px solid #334155; }
+.kpi-label { font-size: 20px; color: #64748b; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+.kpi-value { font-size: 56px; font-weight: 700; color: #3b82f6; }
+.kpi-sub { font-size: 18px; color: #94a3b8; margin-top: 8px; }
+.callout { background: #1e3a5f; border-left: 4px solid #3b82f6; padding: 24px 32px; border-radius: 0 12px 12px 0; margin: 32px 0; }
+.callout p { color: #93c5fd; font-size: 28px; margin: 0; }
+.chart-placeholder { background: #1e293b; border-radius: 16px; padding: 40px; margin: 32px 0; min-height: 400px; display: flex; align-items: center; justify-content: center; border: 1px solid #334155; }
+.chart-placeholder .chart-title { font-size: 24px; color: #94a3b8; text-align: center; }
+table { width: 100%; border-collapse: collapse; margin: 32px 0; }
+th, td { padding: 16px 24px; text-align: left; border-bottom: 1px solid #334155; font-size: 24px; }
+th { color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
+td { color: #e2e8f0; }
+td.highlight { color: #3b82f6; font-weight: 600; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
+.list-item { display: flex; align-items: flex-start; margin-bottom: 24px; }
+.list-num { background: #3b82f6; color: white; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 24px; margin-right: 24px; flex-shrink: 0; }
+.list-text { font-size: 28px; color: #e2e8f0; line-height: 1.4; }
+.risk-high { color: #ef4444; }
+.risk-med { color: #f59e0b; }
+.risk-low { color: #22c55e; }
+.nav-buttons { position: fixed; bottom: 40px; left: 80px; display: flex; gap: 16px; z-index: 100; }
+.nav-btn { background: #334155; color: #f8fafc; border: none; padding: 12px 24px; border-radius: 8px; font-size: 18px; cursor: pointer; }
+.nav-btn:hover { background: #475569; }
+@media (prefers-reduced-motion: reduce) { .slide { transition: none; } }
+</style>
+</head>
+<body>
+<div class="deck-stage" id="deck">
+
+<!-- Slide 1: Title -->
+<div class="slide active" id="slide-1">
+  <div>
+    <p class="subtitle">SwiftRide Market Entry Playbook</p>
+    <h1>The Decision: Where to Deploy 50 Drivers in NYC</h1>
+    <p>Data-Driven Deployment Strategy Based on 9M+ Taxi Trips (Q1 2024)</p>
+  </div>
+  <div class="slide-number">1 / 17</div>
+</div>
+
+<!-- Slide 2: Executive Answer -->
+<div class="slide" id="slide-2">
+  <div>
+    <h2>Deploy to 5 Zones, Split by Shift, Anchor at Airports</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Drivers</div>
+        <div class="kpi-value">50</div>
+        <div class="kpi-sub">Across 5 zones</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Monthly Revenue</div>
+        <div class="kpi-value">$560K+</div>
+        <div class="kpi-sub">Projected at full deployment</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Fare</div>
+        <div class="kpi-value">$27</div>
+        <div class="kpi-sub">Blended across zones</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Market Growth</div>
+        <div class="kpi-value">+11.6%</div>
+        <div class="kpi-sub">March vs February trips</div>
+      </div>
+    </div>
+    <div class="callout"><p>💡 This is the recommendation — everything else in this deck supports it.</p></div>
+  </div>
+  <div class="slide-number">2 / 17</div>
+</div>
+
+<!-- Slide 3: JFK Airport -->
+<div class="slide" id="slide-3">
+  <div>
+    <h2>JFK Airport Is the #1 Target — $81 Avg Fare, No Green Competition</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Monthly Trips</div>
+        <div class="kpi-value">137K</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Fare</div>
+        <div class="kpi-value">$81</div>
+        <div class="kpi-sub">3.3x citywide average</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Monthly Revenue</div>
+        <div class="kpi-value">$11M</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Green Trips</div>
+        <div class="kpi-value">13</div>
+        <div class="kpi-sub">Almost zero competition</div>
+      </div>
+    </div>
+    <div class="callout"><p>💡 Green cabs barely operate at airports — this is a premium niche with minimal competition.</p></div>
+  </div>
+  <div class="slide-number">3 / 17</div>
+</div>
+
+<!-- Slide 4: Manhattan Volume -->
+<div class="slide" id="slide-4">
+  <div>
+    <h2>Manhattan Core Offers Volume But Fierce Yellow Competition</h2>
+    <table>
+      <tr><th>Zone</th><th>Monthly Trips</th><th>Avg Fare</th><th>Monthly Revenue</th><th>Competition</th></tr>
+      <tr><td>Midtown Center</td><td class="highlight">135K</td><td>$24</td><td>$3.2M</td><td class="risk-high">Extreme (yellow dominant)</td></tr>
+      <tr><td>Upper East Side South</td><td class="highlight">135K</td><td>$20</td><td>$2.7M</td><td class="risk-high">Extreme (yellow dominant)</td></tr>
+      <tr><td>Times Sq/Theatre District</td><td class="highlight">99K</td><td>$27</td><td>$2.7M</td><td class="risk-high">Extreme (yellow dominant)</td></tr>
+      <tr><td>Penn Station/Madison Sq</td><td class="highlight">99K</td><td>$24</td><td>$2.4M</td><td class="risk-high">Extreme (yellow dominant)</td></tr>
+    </table>
+    <div class="callout"><p>💡 Yellow cabs completely own Midtown — 100K+ trips/zone. SwiftRide must compete on service, not price.</p></div>
+  </div>
+  <div class="slide-number">4 / 17</div>
+</div>
+
+<!-- Slide 5: Green Gap -->
+<div class="slide" id="slide-5">
+  <div>
+    <h2>Green Cabs Are Weak in Core — Gap Zones Exist</h2>
+    <div class="two-col">
+      <div>
+        <h3>Where Green Cabs Operate</h3>
+        <table>
+          <tr><th>Zone</th><th>Green Trips</th><th>Avg Fare</th></tr>
+          <tr><td>East Harlem North</td><td class="highlight">12,010</td><td>$20</td></tr>
+          <tr><td>East Harlem South</td><td class="highlight">8,320</td><td>$20</td></tr>
+          <tr><td>Forest Hills</td><td class="highlight">2,754</td><td>$20</td></tr>
+          <tr><td>Central Park</td><td class="highlight">2,740</td><td>$22</td></tr>
+          <tr><td>Morningside Heights</td><td class="highlight">2,604</td><td>$22</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Where Green Cabs Are Absent</h3>
+        <table>
+          <tr><th>Zone</th><th>Green Trips</th><th>Yellow Trips</th></tr>
+          <tr><td>Midtown Center</td><td class="risk-low">0</td><td>140K</td></tr>
+          <tr><td>Upper East Side</td><td class="risk-low">0</td><td>140K</td></tr>
+          <tr><td>Times Sq</td><td class="risk-low">0</td><td>103K</td></tr>
+          <tr><td>Midtown East</td><td class="risk-low">0</td><td>104K</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="callout"><p>💡 These "gap zones" are underserved by yellows — potential opportunity for SwiftRide.</p></div>
+  </div>
+  <div class="slide-number">5 / 17</div>
+</div>
+
+<!-- Slide 6: Weekday Hours -->
+<div class="slide" id="slide-6">
+  <div>
+    <h2>Weekday Peak: 5-6 PM With 190K+ Trips/Hour</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Peak Hour</div>
+        <div class="kpi-value">5-6 PM</div>
+        <div class="kpi-sub">190K+ trips/hour</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Revenue Window</div>
+        <div class="kpi-value">4-8 PM</div>
+        <div class="kpi-sub">25% of daily revenue</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Morning Rush</div>
+        <div class="kpi-value">7-10 AM</div>
+        <div class="kpi-sub">90K-130K trips/hour</div>
+      </div>
+    </div>
+    <div class="callout"><p>💡 Two shifts: morning rush (7-10 AM) and evening peak (4-8 PM) capture the highest-value hours.</p></div>
+  </div>
+  <div class="slide-number">6 / 17</div>
+</div>
+
+<!-- Slide 7: Weekend Pattern -->
+<div class="slide" id="slide-7">
+  <div>
+    <h2>Weekend Demand Shifts Later — Different Strategy Needed</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Weekend Peak</div>
+        <div class="kpi-value">3-6 PM</div>
+        <div class="kpi-sub">Broader afternoon peak</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Late Night</div>
+        <div class="kpi-value">10 PM-2 AM</div>
+        <div class="kpi-sub">Entertainment traffic</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Weekend Volume</div>
+        <div class="kpi-value">690K</div>
+        <div class="kpi-sub">vs 2.5M weekday</div>
+      </div>
+    </div>
+    <div class="callout"><p>💡 Weekend = entertainment market. Different zones, different hours, different trip purposes.</p></div>
+  </div>
+  <div class="slide-number">7 / 17</div>
+</div>
+
+<!-- Slide 8: Trip Profile -->
+<div class="slide" id="slide-8">
+  <div>
+    <h2>The Sweet Spot: 1-3 Mile Urban Hops</h2>
+    <table>
+      <tr><th>Distance</th><th>Trip Share</th><th>Revenue Share</th><th>Avg Fare</th><th>Revenue/Mile</th></tr>
+      <tr><td>0-1 mi</td><td>24%</td><td>12%</td><td>$14</td><td class="highlight">$21/mi</td></tr>
+      <tr><td class="highlight">1-2 mi</td><td class="highlight">34%</td><td class="highlight">23%</td><td class="highlight">$19</td><td class="highlight">$13/mi</td></tr>
+      <tr><td class="highlight">2-3 mi</td><td class="highlight">16%</td><td class="highlight">14%</td><td class="highlight">$24</td><td class="highlight">$10/mi</td></tr>
+      <tr><td>3-5 mi</td><td>11%</td><td>12%</td><td>$31</td><td>$8/mi</td></tr>
+      <tr><td>10-20 mi</td><td>7%</td><td>21%</td><td>$82</td><td>$5/mi</td></tr>
+    </table>
+    <div class="callout"><p>💡 1-3 mile trips: 74% of volume, $10-13/mi efficiency. Short hops beat long haul for driver utilization.</p></div>
+  </div>
+  <div class="slide-number">8 / 17</div>
+</div>
+
+<!-- Slide 9: Airport Economics -->
+<div class="slide" id="slide-9">
+  <div>
+    <h2>Airports: Premium Niche, Not Core Strategy</h2>
+    <table>
+      <tr><th>Service Zone</th><th>Trips</th><th>Avg Fare</th><th>Revenue</th><th>Share</th></tr>
+      <tr><td>Yellow Zone (City)</td><td>2.4M</td><td>$23</td><td>$54M</td><td>73%</td></tr>
+      <tr><td class="highlight">Airports</td><td class="highlight">224K</td><td class="highlight">$75</td><td class="highlight">$17M</td><td class="highlight">23%</td></tr>
+      <tr><td>Boro Zone</td><td>95K</td><td>$34</td><td>$3M</td><td>4%</td></tr>
+    </table>
+    <div class="callout"><p>💡 Airports generate 23% of revenue from 8% of trips. Allocate 5-10 drivers, not 50 — demand is finite.</p></div>
+  </div>
+  <div class="slide-number">9 / 17</div>
+</div>
+
+<!-- Slide 10: April Momentum -->
+<div class="slide" id="slide-10">
+  <div>
+    <h2>March Momentum: +11.6% Trips, +15.5% Revenue</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">January</div>
+        <div class="kpi-value">2.72M</div>
+        <div class="kpi-sub">trips</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">February</div>
+        <div class="kpi-value">2.72M</div>
+        <div class="kpi-sub">trips (-0.2%)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">March</div>
+        <div class="kpi-value">3.04M</div>
+        <div class="kpi-sub">trips (+11.6%)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">April Projection</div>
+        <div class="kpi-value">3.2M+</div>
+        <div class="kpi-sub">if momentum holds</div>
+      </div>
+    </div>
+    <div class="callout"><p>💡 Market is accelerating into April. Revenue growing faster than volume — fares increasing. Right time to launch.</p></div>
+  </div>
+  <div class="slide-number">10 / 17</div>
+</div>
+
+<!-- Slide 11: Fastest-Growing Zones -->
+<div class="slide" id="slide-11">
+  <div>
+    <h2>Fastest-Growing Zones: Brooklyn, Alphabet City, Seaport</h2>
+    <table>
+      <tr><th>Zone</th><th>Jan Trips</th><th>Mar Trips</th><th>Growth</th></tr>
+      <tr><td class="highlight">Downtown Brooklyn/MetroTech</td><td>1,074</td><td>1,558</td><td class="highlight">+45.1%</td></tr>
+      <tr><td class="highlight">Alphabet City</td><td>2,469</td><td>3,549</td><td class="highlight">+43.7%</td></tr>
+      <tr><td class="highlight">Seaport</td><td>3,797</td><td>5,067</td><td class="highlight">+33.4%</td></tr>
+      <tr><td>World Trade Center</td><td>11,699</td><td>15,390</td><td>+31.5%</td></tr>
+      <tr><td>Meatpacking/West Village West</td><td>20,986</td><td>27,238</td><td>+29.8%</td></tr>
+    </table>
+    <div class="callout"><p>💡 These zones are growing 25-45% — watch for April opportunity. Downtown Brooklyn is the breakout star.</p></div>
+  </div>
+  <div class="slide-number">11 / 17</div>
+</div>
+
+<!-- Slide 12: Day-of-Week -->
+<div class="slide" id="slide-12">
+  <div>
+    <h2>Weekday vs Weekend: Wednesday Peak, Sunday Slowest</h2>
+    <table>
+      <tr><th>Day</th><th>Trips</th><th>Avg Fare</th><th>Revenue</th><th>Staffing</th></tr>
+      <tr><td class="highlight">Wednesday</td><td class="highlight">459K</td><td>$28</td><td>$12.6M</td><td>Full deployment</td></tr>
+      <tr><td>Tuesday</td><td>426K</td><td>$28</td><td>$11.8M</td><td>Full deployment</td></tr>
+      <tr><td>Thursday</td><td>397K</td><td>$28</td><td>$11.0M</td><td>Full deployment</td></tr>
+      <tr><td>Saturday</td><td>384K</td><td>$25</td><td>$9.7M</td><td>Weekend shift</td></tr>
+      <tr><td>Friday</td><td>379K</td><td>$27</td><td>$10.3M</td><td>Full + late night</td></tr>
+      <tr><td>Monday</td><td>372K</td><td>$29</td><td>$10.8M</td><td>Full deployment</td></tr>
+      <tr><td>Sunday</td><td>306K</td><td>$27</td><td>$8.4M</td><td>Lighter staffing</td></tr>
+    </table>
+    <div class="callout"><p>💡 Staff up Tuesday-Thursday. Sunday is 33% slower than Wednesday — plan accordingly.</p></div>
+  </div>
+  <div class="slide-number">12 / 17</div>
+</div>
+
+<!-- Slide 13: Weekend Nights -->
+<div class="slide" id="slide-13">
+  <div>
+    <h2>Weekend Late Night: Midtown and Times Square Dominate</h2>
+    <table>
+      <tr><th>Zone</th><th>Borough</th><th>Late Night Trips</th><th>Avg Fare</th></tr>
+      <tr><td class="highlight">JFK Airport</td><td>Queens</td><td class="highlight">5,158</td><td>$78</td></tr>
+      <tr><td class="highlight">Times Sq/Theatre District</td><td>Manhattan</td><td class="highlight">3,642</td><td>$23</td></tr>
+      <tr><td>West Village</td><td>Manhattan</td><td>3,258</td><td>$24</td></tr>
+      <tr><td>Lincoln Square East</td><td>Manhattan</td><td>3,164</td><td>$22</td></tr>
+      <tr><td>East Village</td><td>Manhattan</td><td>3,155</td><td>$23</td></tr>
+    </table>
+    <div class="callout"><p>💡 Weekend late night = entertainment traffic. JFK stays strong for airport runs. Deploy 5-8 drivers for this window.</p></div>
+  </div>
+  <div class="slide-number">13 / 17</div>
+</div>
+
+<!-- Slide 14: Deployment Playbook -->
+<div class="slide" id="slide-14">
+  <div>
+    <h2>The Deployment Playbook: 50 Drivers Across 3 Shifts</h2>
+    <div class="two-col">
+      <div>
+        <h3>Weekday (40 drivers)</h3>
+        <table>
+          <tr><th>Shift</th><th>Hours</th><th>Drivers</th><th>Revenue/Driver</th></tr>
+          <tr><td>Morning Rush</td><td>7-10 AM</td><td>12</td><td>$75</td></tr>
+          <tr><td>Midday</td><td>10 AM-4 PM</td><td>8</td><td>$120</td></tr>
+          <tr><td class="highlight">Evening Peak</td><td class="highlight">4-8 PM</td><td class="highlight">15</td><td class="highlight">$110</td></tr>
+          <tr><td>Late Night</td><td>8 PM-12 AM</td><td>5</td><td>$80</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Weekend (30 drivers)</h3>
+        <table>
+          <tr><th>Shift</th><th>Hours</th><th>Drivers</th><th>Revenue/Driver</th></tr>
+          <tr><td>Afternoon</td><td>2-6 PM</td><td>12</td><td>$100</td></tr>
+          <tr><td class="highlight">Evening</td><td class="highlight">6-10 PM</td><td class="highlight">10</td><td class="highlight">$105</td></tr>
+          <tr><td>Late Night</td><td>10 PM-2 AM</td><td>8</td><td>$90</td></tr>
+        </table>
+        <h3 style="margin-top:32px">Airport (10 drivers)</h3>
+        <table>
+          <tr><th>Shift</th><th>Hours</th><th>Drivers</th><th>Revenue/Driver</th></tr>
+          <tr><td>Morning</td><td>6 AM-2 PM</td><td>4</td><td>$280</td></tr>
+          <tr><td class="highlight">Evening</td><td class="highlight">2 PM-10 PM</td><td class="highlight">4</td><td class="highlight">$320</td></tr>
+          <tr><td>Night</td><td>10 PM-6 AM</td><td>2</td><td>$300</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">14 / 17</div>
+</div>
+
+<!-- Slide 15: Risks -->
+<div class="slide" id="slide-15">
+  <div>
+    <h2>Risks: Weather, Competition, Driver Retention</h2>
+    <table>
+      <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+      <tr><td>Weather/events disrupt April demand</td><td class="risk-med">Medium</td><td>Monitor weekly; Jan-Mar doesn't capture spring weather</td></tr>
+      <tr><td>Yellow cabs retaliate with surge pricing</td><td class="risk-med">Medium</td><td>Focus on airport premium (regulated fares) and growing zones</td></tr>
+      <tr><td>Green cabs expand into target zones</td><td class="risk-low">Low</td><td>Green volume is 50x lower — limited threat</td></tr>
+      <tr><td>Driver retention below 50</td><td class="risk-high">High</td><td>Offer airport shifts (higher tips) as retention tool</td></tr>
+      <tr><td>Airport authorization delays</td><td class="risk-med">Medium</td><td>Start with city zones, add airports in Month 2</td></tr>
+      <tr><td>Zone demand shifts seasonally</td><td class="risk-med">Medium</td><td>Re-run analysis quarterly</td></tr>
+    </table>
+    <div class="callout"><p>⚠️ What could make us wrong: Weather, competition, and driver retention are the top risks to monitor.</p></div>
+  </div>
+  <div class="slide-number">15 / 17</div>
+</div>
+
+<!-- Slide 16: Plan B -->
+<div class="slide" id="slide-16">
+  <div>
+    <h2>Plan B: Target Green Gap Zones</h2>
+    <p>If airports denied or Midtown too competitive, deploy to these alternative zones:</p>
+    <table>
+      <tr><th>Zone</th><th>Borough</th><th>Green Trips</th><th>Avg Fare</th><th>Why</th></tr>
+      <tr><td class="highlight">East Harlem North</td><td>Manhattan</td><td>12,010</td><td>$20</td><td>Green territory, low yellow presence</td></tr>
+      <tr><td class="highlight">Forest Hills</td><td>Queens</td><td>2,754</td><td>$20</td><td>Residential, underserved</td></tr>
+      <tr><td class="highlight">Downtown Brooklyn</td><td>Brooklyn</td><td>1,576</td><td>$24</td><td>Fastest growing (+45%)</td></tr>
+      <tr><td class="highlight">Alphabet City</td><td>Manhattan</td><td>—</td><td>—</td><td>Fastest growing (+44%)</td></tr>
+      <tr><td class="highlight">Central Park</td><td>Manhattan</td><td>2,740</td><td>$22</td><td>Tourist traffic</td></tr>
+    </table>
+    <div class="callout"><p>🔄 The fallback: target the "green gap" — zones where green cabs operate but yellow doesn't dominate. Lower volume but less competition.</p></div>
+  </div>
+  <div class="slide-number">16 / 17</div>
+</div>
+
+<!-- Slide 17: Next Steps -->
+<div class="slide" id="slide-17">
+  <div>
+    <h2>Next Steps: Validate, Recruit, Launch, Monitor</h2>
+    <div style="margin: 40px 0;">
+      <div class="list-item"><div class="list-num">1</div><div class="list-text"><strong>Validate airport authorization</strong> — Can SwiftRide operate at JFK/LaGuardia?</div></div>
+      <div class="list-item"><div class="list-num">2</div><div class="list-text"><strong>Recruit 50 drivers</strong> — Target airport-experienced drivers for retention</div></div>
+      <div class="list-item"><div class="list-num">3</div><div class="list-text"><strong>Launch in 5 zones</strong> — Start with city zones, add airports in Month 2</div></div>
+      <div class="list-item"><div class="list-num">4</div><div class="list-text"><strong>Monitor weekly</strong> — Track actual vs projected revenue per zone</div></div>
+      <div class="list-item"><div class="list-num">5</div><div class="list-text"><strong>Re-run analysis in May</strong> — Update with April data to refine strategy</div></div>
+    </div>
+    <div class="callout"><p>🎯 The market is growing. The zones are identified. The shifts are planned. Time to execute.</p></div>
+  </div>
+  <div class="slide-number">17 / 17</div>
+</div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav-buttons">
+  <button class="nav-btn" onclick="prevSlide()">← Previous</button>
+  <button class="nav-btn" onclick="nextSlide()">Next →</button>
+</div>
+
+<script>
+let currentSlide = 1;
+const totalSlides = 17;
+
+function showSlide(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('slide-' + n).classList.add('active');
+  currentSlide = n;
+}
+
+function nextSlide() { if (currentSlide < totalSlides) showSlide(currentSlide + 1); }
+function prevSlide() { if (currentSlide > 1) showSlide(currentSlide - 1); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+  if (e.key === 'ArrowLeft') prevScale();
+});
+
+// Scale to fit viewport
+function scaleDeck() {
+  const stage = document.getElementById('deck');
+  const scaleX = window.innerWidth / 1920;
+  const scaleY = window.innerHeight / 1080;
+  const scale = Math.min(scaleX, scaleY);
+  stage.style.transform = `scale(${scale})`;
+  stage.style.transformOrigin = 'top left';
+  stage.style.marginLeft = (window.innerWidth - 1920 * scale) / 2 + 'px';
+  stage.style.marginTop = (window.innerHeight - 1080 * scale) / 2 + 'px';
+}
+
+window.addEventListener('resize', scaleDeck);
+scaleDeck();
+</script>
+</body>
+</html>

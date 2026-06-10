@@ -1,0 +1,165 @@
+{
+  "title": "SwiftRide NYC Market Entry Playbook",
+  "audience": "Maya Chen, VP of Operations at SwiftRide",
+  "density": "speaker-led",
+  "pattern": "decision-memo",
+  "coreQuestion": "Where should SwiftRide deploy its first 50 NYC drivers, when should they work, and how should they position against incumbents?",
+  "oneSentenceAnswer": "Deploy 50 drivers across 5 zones (JFK Airport, Midtown Center, Times Square, Upper East Side, LaGuardia) with split weekday/weekend shifts, targeting 1-3 mile urban hops and airport premium runs.",
+  "slides": [
+    {
+      "id": 1,
+      "title": "The Decision: Where to Deploy 50 Drivers in NYC",
+      "type": "title",
+      "content": "SwiftRide Market Entry Playbook — Data-Driven Deployment Strategy",
+      "evidence": null
+    },
+    {
+      "id": 2,
+      "title": "Deploy to 5 Zones, Split by Shift, Anchor at Airports",
+      "type": "executive-answer",
+      "content": "50 drivers → 5 zones → 2 shifts → $560K+ monthly revenue potential",
+      "evidence": ["report.md: Executive Summary"]
+    },
+    {
+      "id": 3,
+      "title": "JFK Airport Is the #1 Target — $81 Avg Fare, No Green Competition",
+      "type": "evidence",
+      "content": "137K monthly trips, $11M revenue, 3.3x citywide average fare",
+      "evidence": ["q1.md: Zone Volume Ranking", "q6.md: Airport Profile"],
+      "chart": "q1_opportunity_score"
+    },
+    {
+      "id": 4,
+      "title": "Manhattan Core Offers Volume But Fierce Yellow Competition",
+      "type": "evidence",
+      "content": "Midtown Center: 135K trips, $24 avg. Upper East Side: 135K trips, $20 avg.",
+      "evidence": ["q1.md: Zone Volume Ranking", "q3.md: Yellow Dominance"],
+      "chart": "q3_yellow_dominance"
+    },
+    {
+      "id": 5,
+      "title": "Green Cabs Are Weak in Core — Gap Zones Exist",
+      "type": "evidence",
+      "content": "Green operates in East Harlem (12K), Queens (3K), Brooklyn (2K). Almost zero in Midtown.",
+      "evidence": ["q3.md: Green Territory"],
+      "chart": "q3_green_territory"
+    },
+    {
+      "id": 6,
+      "title": "Weekday Peak: 5-6 PM With 190K+ Trips/Hour",
+      "type": "evidence",
+      "content": "Two shifts: morning rush (7-10 AM) and evening peak (4-8 PM)",
+      "evidence": ["q2.md: Hourly Demand Curve"],
+      "chart": "q2_hourly_demand"
+    },
+    {
+      "id": 7,
+      "title": "Weekend Demand Shifts Later — Different Strategy Needed",
+      "type": "evidence",
+      "content": "Peak 3-6 PM, strong late night (10 PM-2 AM). Weekend = entertainment market.",
+      "evidence": ["q7.md: Hourly Pattern by Day Type"],
+      "chart": "q7_hourly_by_day"
+    },
+    {
+      "id": 8,
+      "title": "The Sweet Spot: 1-3 Mile Urban Hops",
+      "type": "evidence",
+      "content": "74% of trips, $10-13/mi revenue efficiency vs $5/mi for long haul",
+      "evidence": ["q4.md: Trip Distance Distribution"],
+      "chart": "q4_distance_distribution"
+    },
+    {
+      "id": 9,
+      "title": "Airports: Premium Niche, Not Core Strategy",
+      "type": "evidence",
+      "content": "$75 avg fare, 8% of volume. Allocate 5-10 drivers, not 50.",
+      "evidence": ["q6.md: Service Zone Economics"],
+      "chart": "q6_service_zone_comparison"
+    },
+    {
+      "id": 10,
+      "title": "March Momentum: +11.6% Trips, +15.5% Revenue",
+      "type": "evidence",
+      "content": "Market is accelerating into April. Right time to launch.",
+      "evidence": ["q5.md: Month-over-Month Trend"],
+      "chart": "q5_monthly_trend"
+    },
+    {
+      "id": 11,
+      "title": "Fastest-Growing Zones: Brooklyn, Alphabet City, Seaport",
+      "type": "evidence",
+      "content": "Downtown Brooklyn +45%, Alphabet City +44%, Seaport +33% Jan→Mar",
+      "evidence": ["q5.md: Zone-Level Trends"],
+      "chart": "q5_zone_trends"
+    },
+    {
+      "id": 12,
+      "title": "Weekday vs Weekend: Wednesday Peak, Sunday Slowest",
+      "type": "evidence",
+      "content": "Wednesday 459K trips, Sunday 306K. Plan staffing accordingly.",
+      "evidence": ["q7.md: Day-of-Week Breakdown"],
+      "chart": "q7_day_of_week"
+    },
+    {
+      "id": 13,
+      "title": "Weekend Late Night: Midtown and Times Square Dominate",
+      "type": "evidence",
+      "content": "10 PM-2 AM: JFK (5K), Times Sq (3.6K), West Village (3.3K)",
+      "evidence": ["q7.md: Weekend Night Hotspots"],
+      "chart": "q7_weekend_night_zones"
+    },
+    {
+      "id": 14,
+      "title": "The Deployment Playbook: 50 Drivers Across 3 Shifts",
+      "type": "recommendation",
+      "content": "Weekday: 12 morning + 8 midday + 15 evening + 5 late night. Weekend: 12 afternoon + 10 evening + 8 late night. Airport: 10 drivers split across 3 shifts.",
+      "evidence": ["report.md: Driver Deployment Playbook"]
+    },
+    {
+      "id": 15,
+      "title": "Risks: Weather, Competition, Driver Retention",
+      "type": "caveat",
+      "content": "April weather/Easter unknown. Yellow cab retaliation possible. Driver retention critical — offer airport shifts as incentive.",
+      "evidence": ["report.md: Risk Register"]
+    },
+    {
+      "id": 16,
+      "title": "Plan B: Target Green Gap Zones",
+      "type": "alternative",
+      "content": "If airports denied or Midtown too competitive: East Harlem, Forest Hills, Downtown Brooklyn, Alphabet City, Central Park.",
+      "evidence": ["report.md: Plan B"]
+    },
+    {
+      "id": 17,
+      "title": "Next Steps: Validate, Recruit, Launch, Monitor",
+      "type": "action",
+      "content": "1. Validate airport authorization. 2. Recruit 50 drivers. 3. Launch in 5 zones. 4. Monitor weekly. 5. Re-run analysis in May.",
+      "evidence": ["report.md: Next Steps"]
+    }
+  ],
+  "sources": {
+    "report": "pages/report.md",
+    "queries": [
+      "pages/q1.md",
+      "pages/q2.md",
+      "pages/q3.md",
+      "pages/q4.md",
+      "pages/q5.md",
+      "pages/q6.md",
+      "pages/q7.md"
+    ],
+    "data": [
+      "files.yellow_tripdata_2024_01",
+      "files.yellow_tripdata_2024_02",
+      "files.yellow_tripdata_2024_03",
+      "files.green_tripdata_2024_01",
+      "files.taxi_zone_lookup"
+    ]
+  },
+  "caveats": [
+    "Jan-Mar 2024 data only — April weather/Easter not captured",
+    "Assumes SwiftRide pricing matches TLC benchmarks",
+    "Green taxi data has higher uncertainty (56K trips/month vs 3M yellow)",
+    "Revenue estimates based on averages — actual varies by time/demand"
+  ]
+}
