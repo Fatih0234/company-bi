@@ -11,6 +11,69 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Existing content workspaces may have broad .pi/ symlinks from older
+# workspace creation code. Repair those before Pi auto-discovers resources,
+# otherwise test files such as evidence-health-check.test.ts can be loaded as
+# extensions.
+if [[ -f "$PWD/.cmux/workspace.json" && -f "$PROJECT_ROOT/pi-pkg/package.json" ]]; then
+  PROJECT_ROOT="$PROJECT_ROOT" python3 - <<'PY'
+import json
+import os
+import shutil
+from pathlib import Path
+
+root = Path(os.environ["PROJECT_ROOT"]).resolve()
+workspace = Path.cwd().resolve()
+package_path = root / "pi-pkg" / "package.json"
+
+try:
+    package = json.loads(package_path.read_text())
+except Exception:
+    raise SystemExit(0)
+
+pi_config = package.get("pi")
+if not isinstance(pi_config, dict):
+    raise SystemExit(0)
+
+workspace_pi = workspace / ".pi"
+workspace_pi.mkdir(parents=True, exist_ok=True)
+
+for section, dirname in {
+    "extensions": "extensions",
+    "skills": "skills",
+    "prompts": "prompts",
+    "themes": "themes",
+}.items():
+    target_dir = workspace_pi / dirname
+    if target_dir.is_symlink() or target_dir.exists():
+        if target_dir.is_symlink() or target_dir.is_file():
+            target_dir.unlink()
+        elif target_dir.is_dir():
+            shutil.rmtree(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    entries = pi_config.get(section)
+    if not isinstance(entries, list):
+        continue
+    for raw_entry in entries:
+        entry = str(raw_entry)
+        if not entry.startswith(f"./{dirname}/"):
+            continue
+        source = (root / "pi-pkg" / entry).resolve()
+        if not source.exists():
+            continue
+        destination = target_dir / source.name
+        if not destination.exists() and not destination.is_symlink():
+            destination.symlink_to(source, target_is_directory=source.is_dir())
+
+for filename in ["settings.json", "package.json"]:
+    source = root / "pi-pkg" / filename
+    destination = workspace_pi / filename
+    if source.exists() and not destination.exists() and not destination.is_symlink():
+        destination.symlink_to(source)
+PY
+fi
+
 exec pi \
   -e "$PROJECT_ROOT/pi-pkg" \
   "$@"

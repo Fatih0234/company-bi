@@ -12,6 +12,7 @@ export const TOOL_NAMES = {
   makeReport: "duckdb_make_report",
   queryAuditLog: "duckdb_query_audit_log",
   joinCoverage: "duckdb_join_coverage",
+  validateEvidenceSql: "duckdb_validate_evidence_sql",
 } as const;
 
 export const DEFAULT_MAX_ROWS = 100;

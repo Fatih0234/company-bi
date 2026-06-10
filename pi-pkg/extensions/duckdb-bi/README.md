@@ -40,6 +40,7 @@ duckdb -version
 9. `duckdb_make_report`
 10. `duckdb_query_audit_log`
 11. `duckdb_join_coverage` (new — check FK coverage in both directions; supports `auto_discover`)
+12. `duckdb_validate_evidence_sql` (validate SQL before moving it into Evidence pages: registered sources, non-empty result, expected columns, and chart handoff warnings)
 
 ## Safety model
 
@@ -126,6 +127,7 @@ npm test
 Runs `node --test` against:
 - `tests/findings.test.ts` — unit tests for the pure findings logic in `src/lib/findings.ts` (all 9 detection codes + `areTypesCompatible` type-checking, with positive and negative cases). Loaded via Node's `--experimental-strip-types`; no transpilation step.
 - `tests/join-coverage.test.mjs` — integration test of `duckdb_join_coverage` against the mini fixtures in `tests/fixtures/`. Loaded via jiti with test-only stubs for `@earendil-works/pi-coding-agent` and `typebox` (both are only used at registration time, never at execute time).
+- `tests/evidence-sources.test.mjs` — integration tests for Evidence source resolution, content-only workspace behavior, `duckdb_data_sources` orientation output, `duckdb_list_tables include_counts`, and `duckdb_validate_evidence_sql`.
 
 Both files run against a real DuckDB CLI; each test creates its own `mkdtemp` project root and cleans up after itself.
 
@@ -148,6 +150,7 @@ After loading the extension in Pi, ask the agent to run these tool-level checks:
 13. truncation: query more rows than `max_rows`
 14. `duckdb_summarize_table` on `taxi_zone_lookup_mini` — expect a `findings` array with `EDGE_CASE_SENTINEL` (Borough N/A/Unknown), `DUPLICATE_NAME` (Zone Governor's Island 3x), `POSSIBLE_DIMENSION` heuristic. Same call against the real `data/taxi_zone_lookup.csv` produces an analogous response.
 15. `duckdb_join_coverage` on `taxi_zone_lookup_mini` with `key_column: "LocationID"`, `auto_discover: true` — expect 2 candidates (`pu_prefix`, `do_prefix`), 92.86% forward coverage (1 orphan in the mini fact), `LOW_COVERAGE` warning + `UNUSED_DIMENSION_ROWS` info finding.
+16. `duckdb_validate_evidence_sql` on a query using `files.<alias>` — expect `evidence_ready: true`; the same tool on raw `read_csv_auto('data/file.csv')` for page SQL should return `evidence_ready: false` with `RAW_FILE_READ_IN_EVIDENCE_SQL`.
 
 ## Troubleshooting
 

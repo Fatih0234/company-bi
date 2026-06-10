@@ -27,6 +27,10 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
         (self.root / "scripts").mkdir()
         (self.root / "sources" / "tlc").mkdir(parents=True)
         (self.root / ".pi" / "extensions").mkdir(parents=True)
+        (self.root / "pi-pkg" / "extensions" / "duckdb-bi").mkdir(parents=True)
+        (self.root / "pi-pkg" / "skills" / "evidence-dashboard").mkdir(parents=True)
+        (self.root / "pi-pkg" / "prompts").mkdir(parents=True)
+        (self.root / "pi-pkg" / "themes").mkdir(parents=True)
         (self.root / ".evidence" / "template" / "static" / "data").mkdir(parents=True)
         (self.root / "node_modules").mkdir()
 
@@ -42,6 +46,28 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
         (self.root / "bin" / "lumen-pi").write_text("#!/usr/bin/env bash\necho pi\n")
         (self.root / "bin" / "pi-full").write_text("#!/usr/bin/env bash\necho pi\n")
         (self.root / "scripts" / "run_evidence_dev.sh").write_text("#!/usr/bin/env bash\necho dev\n")
+        (self.root / "pi-pkg" / "extensions" / "evidence-context.ts").write_text("export default function extension() {}\n")
+        (self.root / "pi-pkg" / "extensions" / "evidence-health-check.ts").write_text("export default function extension() {}\n")
+        (self.root / "pi-pkg" / "extensions" / "evidence-health-check.test.ts").write_text("throw new Error('not an extension');\n")
+        (self.root / "pi-pkg" / "extensions" / "duckdb-bi" / "index.ts").write_text("export default function extension() {}\n")
+        (self.root / "pi-pkg" / "skills" / "evidence-dashboard" / "SKILL.md").write_text("---\nname: evidence-dashboard\n---\n")
+        (self.root / "pi-pkg" / "prompts" / "evidence-dashboard.md").write_text("---\ndescription: test\n---\n")
+        (self.root / "pi-pkg" / "prompts" / ".DS_Store").write_text("not registered\n")
+        (self.root / "pi-pkg" / "themes" / "lumen-bi-midnight.json").write_text("{}\n")
+        (self.root / "pi-pkg" / "settings.json").write_text("{}\n")
+        (self.root / "pi-pkg" / "package.json").write_text(json.dumps({
+            "name": "test-pi-package",
+            "pi": {
+                "extensions": [
+                    "./extensions/evidence-context.ts",
+                    "./extensions/duckdb-bi",
+                    "./extensions/evidence-health-check.ts",
+                ],
+                "skills": ["./skills/evidence-dashboard"],
+                "prompts": ["./prompts/evidence-dashboard.md"],
+                "themes": ["./themes/lumen-bi-midnight.json"],
+            },
+        }, indent=2) + "\n")
 
         config = {
             "type": "evidence",
@@ -106,6 +132,14 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
         self.assertTrue((workspace / "queries").is_dir())
         self.assertTrue((workspace / "data").is_dir())
         self.assertTrue((workspace / "reports").is_dir())
+        self.assertTrue((workspace / ".pi" / "extensions").is_dir())
+        self.assertFalse((workspace / ".pi" / "extensions").is_symlink())
+        self.assertTrue((workspace / ".pi" / "extensions" / "evidence-context.ts").is_symlink())
+        self.assertTrue((workspace / ".pi" / "extensions" / "duckdb-bi").is_symlink())
+        self.assertTrue((workspace / ".pi" / "extensions" / "evidence-health-check.ts").is_symlink())
+        self.assertFalse((workspace / ".pi" / "extensions" / "evidence-health-check.test.ts").exists())
+        self.assertTrue((workspace / ".pi" / "prompts" / "evidence-dashboard.md").is_symlink())
+        self.assertFalse((workspace / ".pi" / "prompts" / ".DS_Store").exists())
         self.assertTrue((workspace / ".cmux" / "workspace.json").is_file())
         self.assertTrue((workspace / ".cmux" / "evidence.json").is_file())
         self.assertTrue((workspace / ".cmux" / "snapshots" / "initial" / "pages" / "report.md").is_file())

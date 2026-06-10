@@ -2,13 +2,18 @@
  * Evidence Quality Guard Extension
  *
  * Unified extension that prevents silent failures in Evidence dashboards
- * by enforcing validation at multiple checkpoints.
+ * by enforcing validation at multiple checkpoints using tiered enforcement.
  *
  * Features:
- * - Query validation: Ensures SQL queries are run via duckdb_run_sql before page writes
- * - Empty dataset detection: Ensures queries return data (row_count > 0)
- * - Static analysis: Detects Svelte/HTML rendering issues
- * - Hard block: Prevents page writes until all validations pass
+ * - Static analysis: Detects Svelte/HTML rendering issues (HARD BLOCK — crashes the page)
+ * - Query validation: Tracks SQL queries run via duckdb_run_sql (POST-WRITE NUDGE)
+ * - Empty dataset detection: Warns when queries return 0 rows (POST-WRITE NUDGE)
+ * - Process reminders: Insight scan, data profiling, doc lookup (POST-WRITE NUDGE)
+ *
+ * Tiered enforcement:
+ * - Hard blocks: Only for static analysis errors that WILL crash the page
+ * - Post-write nudges: SQL validation, empty datasets, process reminders
+ *   (write succeeds, then agent gets a structured reminder to verify)
  *
  * Usage:
  * - Place in .pi/extensions/ for auto-discovery
@@ -26,14 +31,15 @@ import {
   parseDuckDbResponse,
   extractValidationFromResponse,
 } from './query-validator.ts';
-import { extractSqlBlocks, validatePageContent } from './empty-dataset-detector.ts';
+import { extractSqlBlocks, validatePageContent, extractComponentReferences } from './empty-dataset-detector.ts';
 import {
   formatCacheStatus,
   formatValidationErrors,
   formatStaticAnalysisErrors,
+  formatPostWriteReminder,
 } from './error-formatter.ts';
 import { analyzeEvidenceMarkdown } from './static-analysis.ts';
-import type { ValidationResult, RenderingIssue } from './types.ts';
+import type { ValidationResult, RenderingIssue, SqlWarning, WriteValidationResult } from './types.ts';
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -176,6 +182,15 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     hasReadDocs: false,                 // any doc read made
     hasReviewedDashboard: false,        // any page validation done
   };
+  
+  // Pending warnings to inject after successful writes (tiered enforcement)
+  const pendingWarnings = new Map<string, {
+    sqlWarnings: SqlWarning[];
+    processWarnings: string[];
+    validatedCount: number;
+    totalSqlBlocks: number;
+    staticWarnings: RenderingIssue[];
+  }>();
   
   // ── Session Start ───────────────────────────────────────────────
   
@@ -335,12 +350,17 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
   
   /**
    * Validate content that will be written to a page file.
-   * Returns null if validation passes, or block response if it fails.
+   * Uses tiered enforcement:
+   * - Hard blocks: Only for static analysis errors that WILL crash the page
+   * - SQL warnings: Unvalidated queries, empty datasets (non-blocking)
+   * - Process warnings: Missing insight scan, profiling, docs (non-blocking)
+   * 
+   * Returns null if no validation needed, or WriteValidationResult with tiered results.
    */
   async function validateContentBeforeWrite(
     filePath: string,
     content: string,
-  ): Promise<{ block: boolean; reason?: string } | null> {
+  ): Promise<WriteValidationResult | null> {
     // Only validate .md files in pages/ directories
     if (!filePath.endsWith('.md') || !filePath.includes('/pages/')) {
       return null;
@@ -349,14 +369,17 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     // Extract the filename from the path
     const fileName = filePath.split('/').pop() || '';
     
-    // Pages that are exempt from the Insight Candidate Scan check
+    // Pages that are exempt from process checks
     const EXEMPT_PAGES = ['draft.md', 'index.md'];
     const isExemptPage = EXEMPT_PAGES.includes(fileName);
     
-    // ── Insight Candidate Scan Enforcement ───────────────────────
-    // Before writing to any non-exempt page, verify that draft.md
-    // contains the required planning sections. This enforces the
-    // evidence-bi-thinking workflow: plan first, then build.
+    const sqlWarnings: SqlWarning[] = [];
+    const processWarnings: string[] = [];
+    const staticWarnings: RenderingIssue[] = [];
+    
+    // ── Process Reminders (non-blocking) ──────────────────────────
+    
+    // Check Insight Candidate Scan
     if (!isExemptPage) {
       const pagesDir = filePath.replace(/\/pages\/[^/]+$/, '/pages');
       const draftPath = join(pagesDir, 'draft.md');
@@ -369,75 +392,30 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
           
           if (!hasInsightScan || !hasReportPlan) {
             const missing = [];
-            if (!hasInsightScan) missing.push('## Insight Candidate Scan');
-            if (!hasReportPlan) missing.push('## Report Design Plan');
+            if (!hasInsightScan) missing.push('Insight Candidate Scan');
+            if (!hasReportPlan) missing.push('Report Design Plan');
             
-            const missingList = missing.map(m => `- ${m}`).join('\n');
-            const reason = [
-              'PAGE WRITE BLOCKED — Missing required planning sections in draft.md',
-              '',
-              `Before writing to ${fileName}, you must first create an Insight Candidate Scan and Report Design Plan in pages/draft.md.`,
-              '',
-              'Missing sections:',
-              missingList,
-              '',
-              'Required workflow:',
-              '1. Run evidence-bi-thinking skill to generate insight candidates',
-              '2. Write the Report Design Plan to pages/draft.md',
-              '3. Get user alignment on the plan',
-              '4. Then write to the target page',
-              '',
-              'See the evidence-dashboard skill for the full workflow.',
-            ].join('\n');
-            
-            return {
-              block: true,
-              reason,
-            };
+            processWarnings.push(
+              `Missing ${missing.join(' and ')} in draft.md — consider running evidence-bi-thinking skill first`,
+            );
           }
         } catch {
-          // If we can't read draft.md, allow the write to proceed
+          // If we can't read draft.md, skip this check
         }
-      } else {
-        // draft.md doesn't exist — this is a fresh workspace
-        // Allow the write to proceed (first page creation is OK)
       }
     }
     
-    // ── Data Profiling Enforcement ──────────────────────────────
-    // Before writing to pages with SQL queries, verify that data profiling
-    // was performed. This enforces the data-discovery workflow.
+    // Check Data Profiling
     if (!isExemptPage && !sessionState.hasProfiledData) {
-      // Check if the page contains SQL blocks (indicating data analysis)
       const hasSqlBlocks = content.includes('```sql');
       if (hasSqlBlocks) {
-        return {
-          block: true,
-          reason: [
-            'PAGE WRITE BLOCKED — No data profiling performed',
-            '',
-            'Before writing pages with SQL queries, you must first profile the data using:',
-            '- `duckdb_summarize_table` — for distribution, distinct counts, and findings',
-            '- `duckdb_describe_table` — for column names and types',
-            '- `duckdb_quality_report` — for data quality issues',
-            '',
-            'This ensures you understand the data before writing queries.',
-            '',
-            'Required workflow:',
-            '1. Run data-discovery skill to profile the data',
-            '2. Understand column types, distributions, and quality issues',
-            '3. Then write SQL queries with confidence',
-            '',
-            'See the data-discovery skill for the full workflow.',
-          ].join('\n'),
-        };
+        processWarnings.push(
+          'No data profiling detected — consider running duckdb_summarize_table or duckdb_describe_table first',
+        );
       }
     }
     
-    // ── Documentation Lookup Enforcement ────────────────────────
-    // Before writing to pages with Evidence components, verify that
-    // the specific component docs were consulted. This prevents a broad
-    // skill/doc read from bypassing component-level prop checks.
+    // Check Documentation Lookup
     if (!isExemptPage) {
       const usedComponents = extractEvidenceComponents(content);
       const missingDocComponents = usedComponents.filter(componentName => {
@@ -445,34 +423,14 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
       });
 
       if (missingDocComponents.length > 0) {
-        const missingList = missingDocComponents
-          .map(componentName => `- ${componentName}: ${COMPONENT_DOC_ROUTES[componentName]}`)
-          .join('\n');
-        return {
-          block: true,
-          reason: [
-            'PAGE WRITE BLOCKED — Missing component documentation lookup',
-            '',
-            'Before writing pages with Evidence components, read the specific docs for each component used.',
-            'Reading a general skill file or docs index is not enough for component-heavy report pages.',
-            '',
-            'Missing component docs:',
-            missingList,
-            '',
-            'Required workflow:',
-            '1. Read `.agent/docs/evidence-oss/ROUTES.md` for routing',
-            '2. Follow links to each component documentation file listed above',
-            '3. Extract exact props, syntax, and patterns before writing the page',
-            '',
-            'Example:',
-            '- WRONG: `<BarChart data={query} x=zone y=revenue series=count />` (guessing series prop)',
-            '- RIGHT: Read docs → learn series is for categorical grouping → use correctly',
-          ].join('\n'),
-        };
+        const missingList = missingDocComponents.join(', ');
+        processWarnings.push(
+          `Component docs not read for: ${missingList} — consider reading .agent/docs/evidence-oss/ROUTES.md`,
+        );
       }
     }
     
-    // Run static analysis (fast, no external dependencies)
+    // ── Static Analysis (HARD BLOCK — these crash the page) ─────
     const staticIssues = analyzeEvidenceMarkdown(content);
     const staticErrors = staticIssues.filter(i => i.severity === 'error');
     
@@ -480,26 +438,88 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
       const errorMessage = formatStaticAnalysisErrors(staticIssues);
       return {
         block: true,
-        reason: `PAGE WRITE BLOCKED — Static analysis errors found:\n\n${errorMessage}\n\nFix these issues before writing the file.`,
+        blockReason: `PAGE WRITE BLOCKED — Static analysis errors found:\n\n${errorMessage}\n\nFix these issues before writing the file.`,
+        sqlWarnings: [],
+        processWarnings: [],
+        staticWarnings: staticIssues,
+        validatedCount: 0,
+        totalSqlBlocks: 0,
       };
     }
     
-    // Validate SQL blocks against query cache
-    const validationResult = validatePageContent(content, stateManager.getCache());
+    // Store non-error static issues as warnings
+    staticWarnings.push(...staticIssues.filter(i => i.severity !== 'error'));
     
-    if (!validationResult.valid) {
-      const errorMessage = formatValidationErrors(validationResult);
+    // ── SQL Validation (non-blocking — post-write nudge) ──────────
+    const sqlBlocks = extractSqlBlocks(content);
+    const totalSqlBlocks = sqlBlocks.length;
+    
+    if (sqlBlocks.length > 0) {
+      const validationResult = validatePageContent(content, stateManager.getCache());
+      const validatedCount = validationResult.validatedBlocks.length;
+      
+      // Collect unvalidated queries as warnings
+      for (const block of sqlBlocks) {
+        if (validationResult.unvalidatedBlocks.includes(block.name)) {
+          sqlWarnings.push({
+            type: 'unvalidated',
+            blockName: block.name,
+            line: block.line,
+            message: `SQL block \`${block.name}\` has not been run via \`duckdb_run_sql\``,
+          });
+        } else if (validationResult.emptyBlocks.includes(block.name)) {
+          const validated = stateManager.getValidation(block.content);
+          sqlWarnings.push({
+            type: 'empty',
+            blockName: block.name,
+            line: block.line,
+            message: `SQL block \`${block.name}\` returned 0 rows`,
+            rowCount: validated?.rowCount ?? 0,
+          });
+        }
+      }
+      
+      // Check for missing references
+      const componentRefs = extractComponentReferences(content);
+      const sqlBlockNames = new Set(sqlBlocks.map(b => b.name));
+      for (const ref of componentRefs) {
+        if (!sqlBlockNames.has(ref.dataProp)) {
+          sqlWarnings.push({
+            type: 'missing_reference',
+            blockName: ref.dataProp,
+            line: ref.line,
+            message: `<${ref.name}> references query \`${ref.dataProp}\` which doesn't exist in this page`,
+          });
+        }
+      }
+      
       return {
-        block: true,
-        reason: `PAGE WRITE BLOCKED — Query validation errors:\n\n${errorMessage}\n\nRun all queries via duckdb_run_sql before writing the page.`,
+        block: false,
+        sqlWarnings,
+        processWarnings,
+        staticWarnings,
+        validatedCount,
+        totalSqlBlocks,
       };
     }
     
-    // All validations passed
+    // No SQL blocks — just return process warnings if any
+    if (processWarnings.length > 0) {
+      return {
+        block: false,
+        sqlWarnings: [],
+        processWarnings,
+        staticWarnings,
+        validatedCount: 0,
+        totalSqlBlocks: 0,
+      };
+    }
+    
+    // All clear
     return null;
   }
   
-  // Block write/edit tools BEFORE they execute
+  // Block write/edit tools BEFORE they execute (only hard blocks)
   pi.on('tool_call', async (event) => {
     // Process write tool
     if (event.toolName === TOOL_NAMES.write) {
@@ -509,7 +529,18 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
       if (filePath && typeof filePath === 'string' && content && typeof content === 'string') {
         const result = await validateContentBeforeWrite(filePath, content);
         if (result?.block) {
-          return { block: true, reason: result.reason };
+          // Hard block — only for static analysis errors
+          return { block: true, reason: result.blockReason };
+        }
+        // Store warnings for tool_result handler to inject
+        if (result && (result.sqlWarnings.length > 0 || result.processWarnings.length > 0)) {
+          pendingWarnings.set(filePath, {
+            sqlWarnings: result.sqlWarnings,
+            processWarnings: result.processWarnings,
+            validatedCount: result.validatedCount,
+            totalSqlBlocks: result.totalSqlBlocks,
+            staticWarnings: result.staticWarnings,
+          });
         }
       }
     }
@@ -534,7 +565,17 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
             
             const result = await validateContentBeforeWrite(filePath, content);
             if (result?.block) {
-              return { block: true, reason: result.reason };
+              return { block: true, reason: result.blockReason };
+            }
+            // Store warnings for tool_result handler to inject
+            if (result && (result.sqlWarnings.length > 0 || result.processWarnings.length > 0)) {
+              pendingWarnings.set(filePath, {
+                sqlWarnings: result.sqlWarnings,
+                processWarnings: result.processWarnings,
+                validatedCount: result.validatedCount,
+                totalSqlBlocks: result.totalSqlBlocks,
+                staticWarnings: result.staticWarnings,
+              });
             }
           }
         } catch {
@@ -550,6 +591,38 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
       
       // For bash, we can't easily predict the output, so we'll validate after
       // The tool_result handler will catch any issues
+    }
+  });
+  
+  // Inject post-write reminders AFTER successful writes
+  pi.on('tool_result', async (event, ctx) => {
+    // Process write and edit tools for post-write reminders
+    if (event.toolName === TOOL_NAMES.write || event.toolName === TOOL_NAMES.edit) {
+      const filePath = event.input?.path;
+      if (filePath && typeof filePath === 'string') {
+        const warnings = pendingWarnings.get(filePath);
+        if (warnings && (warnings.sqlWarnings.length > 0 || warnings.processWarnings.length > 0)) {
+          // Generate the post-write reminder
+          const reminder = formatPostWriteReminder(
+            filePath,
+            warnings.sqlWarnings,
+            warnings.processWarnings,
+            warnings.validatedCount,
+            warnings.totalSqlBlocks,
+          );
+          
+          // Clean up pending warnings
+          pendingWarnings.delete(filePath);
+          
+          // Inject reminder into tool result
+          return {
+            content: [
+              { type: 'text', text: typeof event.content === 'string' ? event.content : 'File written successfully.' },
+              { type: 'text', text: reminder }
+            ]
+          };
+        }
+      }
     }
   });
   
@@ -573,8 +646,24 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
             if (result?.block) {
               // Can't block after execution, but we can return an error to the LLM
               return {
-                content: [{ type: 'text', text: result.reason }],
+                content: [{ type: 'text', text: result.blockReason }],
                 isError: true,
+              };
+            }
+            // Inject post-write reminder for bash-written files
+            if (result && (result.sqlWarnings.length > 0 || result.processWarnings.length > 0)) {
+              const reminder = formatPostWriteReminder(
+                filePath,
+                result.sqlWarnings,
+                result.processWarnings,
+                result.validatedCount,
+                result.totalSqlBlocks,
+              );
+              return {
+                content: [
+                  { type: 'text', text: typeof event.content === 'string' ? event.content : 'File written via bash.' },
+                  { type: 'text', text: reminder }
+                ]
               };
             }
           }

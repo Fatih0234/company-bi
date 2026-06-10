@@ -85,6 +85,7 @@ The deliverable. Structure:
 - `duckdb_export_query` to save the orphan population, the duplicate-name list, or any other "save this for later" result. They go under `.pi/duckdb/exports/`.
 - `duckdb_make_report` to wrap the narrative + `query_id`s + exports into one Markdown report under `.pi/duckdb/reports/`. Reference the report path at the end of the narrative.
 - Treat `.pi/duckdb/**` as local scratch/provenance. Do not use it as the final dashboard deliverable; convert important findings into Evidence-native Markdown/SQL under `pages/` or `queries/` when the user wants them in the dashboard.
+- Before moving any explored SQL into an Evidence page, run `duckdb_validate_evidence_sql` with the planned SQL, expected columns, and component type. Treat `evidence_ready: false` as a blocker for polished report pages.
 
 ## Style rules
 
@@ -142,4 +143,5 @@ SELECT COUNT(DISTINCT LocationID) AS distinct_ids, COUNT(*) AS row_count FROM ta
 | 5. Join coverage | `duckdb_join_coverage` with `auto_discover: true` or explicit `candidates` |
 | 6. Narrative | (inference + write-up) |
 | 7. Persist | `duckdb_export_query`, `duckdb_make_report` |
+| Evidence handoff | `duckdb_validate_evidence_sql` |
 | Diagnose deep-dives | `duckdb_run_sql` |

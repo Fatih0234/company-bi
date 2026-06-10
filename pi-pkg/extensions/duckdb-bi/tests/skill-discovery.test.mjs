@@ -1,4 +1,4 @@
-// Validates .pi/skills/data-discovery/SKILL.md against the Agent Skills spec
+// Validates pi-pkg/skills/data-discovery/SKILL.md against the Agent Skills spec
 // and checks that every tool name referenced in the skill is actually
 // registered by the duckdb-bi extension.
 //
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const EXT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECT_ROOT = path.resolve(EXT_DIR, "..", "..", "..");
-const SKILL_PATH = path.join(PROJECT_ROOT, ".pi", "skills", "data-discovery", "SKILL.md");
+const SKILL_PATH = path.join(PROJECT_ROOT, "pi-pkg", "skills", "data-discovery", "SKILL.md");
 
 // All tool names the duckdb-bi extension actually registers.
 const REAL_TOOL_NAMES = new Set([
@@ -27,6 +27,7 @@ const REAL_TOOL_NAMES = new Set([
   "duckdb_make_report",
   "duckdb_query_audit_log",
   "duckdb_join_coverage",
+  "duckdb_validate_evidence_sql",
 ]);
 
 function parseFrontmatter(text) {
@@ -43,7 +44,7 @@ function parseFrontmatter(text) {
   return { fields, body };
 }
 
-test("skill file exists at .pi/skills/data-discovery/SKILL.md", async () => {
+test("skill file exists at pi-pkg/skills/data-discovery/SKILL.md", async () => {
   const text = await readFile(SKILL_PATH, "utf-8");
   assert.ok(text.length > 0, "skill file is empty");
 });
@@ -144,7 +145,7 @@ test("the duckdb-bi extension's tool prompts still recommend the same workflow s
   assert.match(skillText, /duckdb_join_coverage/);
 });
 
-test("skill is discoverable at .pi/skills/data-discovery/SKILL.md (no other file structure required)", async () => {
-  const dirEntries = await readdir(path.join(PROJECT_ROOT, ".pi", "skills", "data-discovery"));
+test("skill is discoverable at pi-pkg/skills/data-discovery/SKILL.md (no other file structure required)", async () => {
+  const dirEntries = await readdir(path.join(PROJECT_ROOT, "pi-pkg", "skills", "data-discovery"));
   assert.ok(dirEntries.includes("SKILL.md"), "SKILL.md not present in skill directory");
 });

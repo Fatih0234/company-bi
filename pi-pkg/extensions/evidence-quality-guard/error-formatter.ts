@@ -4,7 +4,7 @@
  * Formats validation errors into actionable messages for the agent.
  */
 
-import type { ValidationError, ValidationResult, RenderingIssue } from './types.ts';
+import type { ValidationError, ValidationResult, RenderingIssue, SqlWarning } from './types.ts';
 
 // ── Error Type Icons ────────────────────────────────────────────────
 
@@ -192,5 +192,113 @@ export function formatCacheStatus(
     }
   }
   
+  return lines.join('\n');
+}
+
+// ── Post-Write Reminder Formatter ────────────────────────────────────
+
+/**
+ * Format a post-write SQL health check reminder.
+ * This is shown after a successful write when there are SQL or process warnings.
+ */
+export function formatPostWriteReminder(
+  filePath: string,
+  sqlWarnings: SqlWarning[],
+  processWarnings: string[],
+  validatedCount: number,
+  totalSqlBlocks: number,
+): string {
+  const lines: string[] = [];
+  const fileName = filePath.split('/').pop() || filePath;
+
+  lines.push('## 📋 Post-Write SQL Health Check Reminder');
+  lines.push('');
+  lines.push(
+    `You just wrote **${totalSqlBlocks} SQL quer${totalSqlBlocks === 1 ? 'y' : 'ies'}** to \`${fileName}\`.`,
+  );
+  lines.push('');
+
+  // Group SQL warnings by type
+  const unvalidated = sqlWarnings.filter(w => w.type === 'unvalidated');
+  const empty = sqlWarnings.filter(w => w.type === 'empty');
+  const missingRef = sqlWarnings.filter(w => w.type === 'missing_reference');
+
+  // ── Empty datasets (highest priority) ──────────────────────────
+  if (empty.length > 0) {
+    lines.push(`### 🚨 Empty Datasets (${empty.length})`);
+    lines.push('');
+    lines.push('These queries returned 0 rows — charts will render empty:');
+    lines.push('');
+    lines.push('| Query | Line | Rows |');
+    lines.push('|-------|------|------|');
+    for (const w of empty) {
+      lines.push(`| \`${w.blockName}\` | ${w.line} | 0 rows |`);
+    }
+    lines.push('');
+  }
+
+  // ── Unvalidated queries ────────────────────────────────────────
+  if (unvalidated.length > 0) {
+    lines.push(`### ⚠️ Unvalidated Queries (${unvalidated.length})`);
+    lines.push('');
+    lines.push('These queries were not found in the validation cache. Please verify them:');
+    lines.push('');
+    lines.push('| Query | Line | Status |');
+    lines.push('|-------|------|--------|');
+    for (const w of unvalidated) {
+      lines.push(`| \`${w.blockName}\` | ${w.line} | 🔍 Not validated |`);
+    }
+    lines.push('');
+  }
+
+  // ── Missing references ─────────────────────────────────────────
+  if (missingRef.length > 0) {
+    lines.push(`### 🔗 Missing Query References (${missingRef.length})`);
+    lines.push('');
+    for (const w of missingRef) {
+      lines.push(`- **Line ${w.line}:** ${w.message}`);
+    }
+    lines.push('');
+  }
+
+  // ── Validated queries summary ──────────────────────────────────
+  if (validatedCount > 0) {
+    lines.push(`### ✅ Validated Queries (${validatedCount})`);
+    lines.push('');
+    lines.push('These queries are validated and return data.');
+    lines.push('');
+  }
+
+  // ── Next steps ─────────────────────────────────────────────────
+  if (sqlWarnings.length > 0) {
+    lines.push('### Next Steps (do these now)');
+    lines.push('');
+    let step = 1;
+    if (unvalidated.length > 0) {
+      lines.push(`${step}. **Run each unvalidated query** via \`duckdb_run_sql\` to verify it returns data`);
+      step++;
+    }
+    if (empty.length > 0) {
+      lines.push(`${step}. **Debug empty queries** — check table names, column names, and filters`);
+      step++;
+    }
+    lines.push(`${step}. **Run \`check_evidence_health\`** to verify the build compiles`);
+    step++;
+    lines.push(`${step}. **Check the preview** in CMUX browser to verify charts render with data`);
+    lines.push('');
+    lines.push('> If any query returns 0 rows or errors, fix the SQL and re-write the affected section.');
+    lines.push('');
+  }
+
+  // ── Process warnings ───────────────────────────────────────────
+  if (processWarnings.length > 0) {
+    lines.push('### 📝 Process Reminders');
+    lines.push('');
+    for (const pw of processWarnings) {
+      lines.push(`- ⚠️ ${pw}`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
 }

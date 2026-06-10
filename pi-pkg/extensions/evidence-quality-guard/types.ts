@@ -75,6 +75,38 @@ export interface ValidationResult {
   emptyBlocks: string[];
 }
 
+// ── Tiered Enforcement Types ────────────────────────────────────────
+
+export interface SqlWarning {
+  /** Type of SQL warning */
+  type: 'unvalidated' | 'empty' | 'missing_reference';
+  /** Name of the SQL block */
+  blockName: string;
+  /** Line number where the issue occurs */
+  line: number;
+  /** Human-readable message */
+  message: string;
+  /** Row count (for empty dataset warnings) */
+  rowCount?: number;
+}
+
+export interface WriteValidationResult {
+  /** Whether the write should be blocked (hard blocks only) */
+  block: boolean;
+  /** Reason for blocking (only if block is true) */
+  blockReason?: string;
+  /** SQL warnings to report after write (non-blocking) */
+  sqlWarnings: SqlWarning[];
+  /** Process warnings to report after write (non-blocking) */
+  processWarnings: string[];
+  /** Static analysis errors that passed (for info) */
+  staticWarnings: RenderingIssue[];
+  /** Number of SQL blocks that passed validation */
+  validatedCount: number;
+  /** Total number of SQL blocks in the file */
+  totalSqlBlocks: number;
+}
+
 // ── Static Analysis Types ───────────────────────────────────────────
 
 export interface RenderingIssue {

@@ -146,7 +146,7 @@ test("content-only config sees shadow Evidence sources while writing artifacts u
   assert.equal(result.rows[0].total_amount, 65);
 
   const tools = new Map();
-  registerMod.registerDuckDbBiTools({ registerTool(tool) { tools.set(tool.name, tool); } }, pathsMod.createConfig(runtime));
+  registerMod.registerDuckDbBiTools({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} }, pathsMod.createConfig(runtime));
   const exportResultRaw = await tools.get("duckdb_export_query").execute("call_1", {
     sql: "SELECT * FROM read_csv_auto('data/local/sample.csv')",
     format: "csv",
@@ -157,4 +157,81 @@ test("content-only config sees shadow Evidence sources while writing artifacts u
   assert.equal(exportResult.ok, true);
   assert.equal(exportResult.path, ".pi/duckdb/exports/local-sample.csv");
   assert.ok(await pathsMod.pathExists(path.join(workspace, ".pi", "duckdb", "exports", "local-sample.csv")));
+});
+
+test("duckdb_data_sources returns semantic orientation for registered workspace tables", async () => {
+  const root = await makeEvidenceRoot();
+  await writeFile(path.join(root, ".cmux", "data-registry.json"), JSON.stringify({
+    version: 1,
+    sourceName: "files",
+    updatedAt: "2026-06-10T00:00:00Z",
+    tables: [{
+      alias: "orders",
+      qualifiedName: "files.orders",
+      path: "data/orders.csv",
+      format: "csv",
+      status: "ready",
+      sizeBytes: 42,
+      rowCount: 2,
+      columns: [
+        { name: "order_id", type: "BIGINT" },
+        { name: "customer_id", type: "BIGINT" },
+        { name: "amount", type: "DOUBLE" },
+      ],
+    }],
+  }), "utf8");
+
+  const tools = new Map();
+  registerMod.registerDuckDbBiTools({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} }, pathsMod.createConfig(root));
+  const raw = await tools.get("duckdb_data_sources").execute("call_1", {}, undefined, undefined, { cwd: root });
+  const data = JSON.parse(raw.content[0].text);
+  assert.equal(data.ok, true);
+  assert.equal(data.summary.registered_table_count, 1);
+  assert.deepEqual(data.summary.preferred_dashboard_sources, ["files.orders"]);
+  assert.equal(data.registered_tables[0].profile_status, "available");
+  assert.equal(data.registered_tables[0].semantic_hints.ids.includes("order_id"), true);
+  assert.match(data.registered_tables[0].next_actions.join("\n"), /files\.orders/);
+});
+
+test("duckdb_list_tables include_counts populates file-backed row counts", async () => {
+  const root = await makeEvidenceRoot();
+  const tools = new Map();
+  registerMod.registerDuckDbBiTools({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} }, pathsMod.createConfig(root));
+  const raw = await tools.get("duckdb_list_tables").execute("call_1", { include_counts: true }, undefined, undefined, { cwd: root });
+  const data = JSON.parse(raw.content[0].text);
+  const filesSchema = data.schemas.find((schema) => schema.schema === "files");
+  const orders = filesSchema.tables.find((table) => table.name === "orders");
+  assert.equal(orders.row_count, 2);
+  assert.ok(data.query_ids.length >= 2);
+});
+
+test("duckdb_validate_evidence_sql accepts registered source SQL and rejects raw file reads for Evidence pages", async () => {
+  const root = await makeEvidenceRoot();
+  await mkdir(path.join(root, "sources", "files"), { recursive: true });
+  await writeFile(path.join(root, "sources", "files", "orders.sql"), "select * from read_csv_auto('data/orders.csv')\n", "utf8");
+
+  const tools = new Map();
+  registerMod.registerDuckDbBiTools({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} }, pathsMod.createConfig(root));
+  assert.ok(tools.has("duckdb_validate_evidence_sql"));
+
+  const validRaw = await tools.get("duckdb_validate_evidence_sql").execute("call_1", {
+    sql: "SELECT customer_id, SUM(amount) AS amount FROM files.orders GROUP BY 1 ORDER BY 1",
+    component_type: "BarChart",
+    expected_columns: ["customer_id", "amount"],
+  }, undefined, undefined, { cwd: root });
+  const valid = JSON.parse(validRaw.content[0].text);
+  assert.equal(valid.ok, true);
+  assert.equal(valid.evidence_ready, true);
+  assert.equal(valid.row_count, 2);
+  assert.deepEqual(valid.referenced_sources, ["files.orders"]);
+
+  const invalidRaw = await tools.get("duckdb_validate_evidence_sql").execute("call_2", {
+    sql: "SELECT * FROM read_csv_auto('data/orders.csv')",
+    expected_columns: ["missing_col"],
+  }, undefined, undefined, { cwd: root });
+  const invalid = JSON.parse(invalidRaw.content[0].text);
+  assert.equal(invalid.evidence_ready, false);
+  const codes = invalid.issues.map((issue) => issue.code);
+  assert.ok(codes.includes("RAW_FILE_READ_IN_EVIDENCE_SQL"));
+  assert.ok(codes.includes("MISSING_EXPECTED_COLUMNS"));
 });

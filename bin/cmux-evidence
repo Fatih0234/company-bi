@@ -1040,6 +1040,59 @@ def copy_project_extension(project_root: Path, worktree_path: Path, extension_na
     copy_project_subdir(project_root, worktree_path, str(Path("pi-pkg") / "extensions" / extension_name))
 
 
+def sync_workspace_pi_resources(root: Path, workspace_root: Path) -> None:
+    """Expose only registered Pi package resources to workspace auto-discovery."""
+    package_path = root / "pi-pkg" / "package.json"
+    if not package_path.exists():
+        return
+    try:
+        package = json.loads(package_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    pi_config = package.get("pi")
+    if not isinstance(pi_config, dict):
+        return
+
+    workspace_pi = workspace_root / ".pi"
+    workspace_pi.mkdir(parents=True, exist_ok=True)
+
+    section_dirs = {
+        "extensions": "extensions",
+        "skills": "skills",
+        "prompts": "prompts",
+        "themes": "themes",
+    }
+    for section, dirname_value in section_dirs.items():
+        target_dir = workspace_pi / dirname_value
+        if target_dir.is_symlink() or target_dir.exists():
+            if target_dir.is_symlink() or target_dir.is_file():
+                target_dir.unlink()
+            elif target_dir.is_dir():
+                shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        entries = pi_config.get(section)
+        if not isinstance(entries, list):
+            continue
+        for raw_entry in entries:
+            entry = str(raw_entry)
+            if not entry.startswith(f"./{dirname_value}/"):
+                continue
+            source = (root / "pi-pkg" / entry).resolve()
+            if not source.exists():
+                continue
+            destination = target_dir / source.name
+            if destination.exists() or destination.is_symlink():
+                continue
+            destination.symlink_to(source, target_is_directory=source.is_dir())
+
+    for filename in ["settings.json", "package.json"]:
+        source = root / "pi-pkg" / filename
+        destination = workspace_pi / filename
+        if source.exists() and not destination.exists() and not destination.is_symlink():
+            destination.symlink_to(source)
+
+
 def prompt_line(label: str, *, default: str = "") -> str:
     suffix = muted(f" [{default}]") if default else ""
     value = input(f"{style(label, bold=True)}{suffix}: ").strip()
@@ -1306,31 +1359,9 @@ def new_content_analysis(title: str, *, print_layout: bool = False, open_after_c
         write_json(workspace_root / ".cmux" / "evidence.json", workspace_config)
         write_workspace_agents_md(workspace_root, metadata, workspace_config)
         write_pi_context(workspace_root, metadata, workspace_config)
-        # Symlink pi-pkg/ subdirectories into the workspace's .pi/ so the Pi agent
-        # (running from workspace root) can discover skills, prompts, extensions,
-        # themes, and settings from the main project.
-        #
-        # DESIGN NOTE: Skills, extensions, prompts, and themes are shared across all
-        # content workspaces via symlinks to the main project's pi-pkg/. This means
-        # updating a skill in pi-pkg/ immediately affects all workspaces. This is
-        # intentional — the workspace isolation is for user content (pages, queries,
-        # data), not for project-level tooling. If per-workspace isolation is needed
-        # in the future, change symlinks to copies.
-        #
-        # We symlink individual subdirs rather than the whole pi-pkg/ to avoid
-        # leaking project-level state like duckdb/ or todos/ into every workspace.
-        workspace_pi = workspace_root / ".pi"
-        workspace_pi.mkdir(parents=True, exist_ok=True)
-        for _sub in ["skills", "prompts", "extensions", "themes"]:
-            _src = root / "pi-pkg" / _sub
-            _dst = workspace_pi / _sub
-            if _src.exists() and not _dst.exists():
-                _dst.symlink_to(_src, target_is_directory=True)
-        for _file in ["settings.json", "package.json"]:
-            _src = root / "pi-pkg" / _file
-            _dst = workspace_pi / _file
-            if _src.exists() and not _dst.exists():
-                _dst.symlink_to(_src)
+        # Expose registered Pi resources to workspace auto-discovery without
+        # exposing tests, todos, or unregistered development files.
+        sync_workspace_pi_resources(root, workspace_root)
         write_content_snapshot(workspace_root, workspace_config, "initial")
         ensure_shadow_runtime(root=root, config=config, workspace_root=workspace_root, shadow_root=shadow_root, metadata=metadata)
         upsert_workspace_registry(registry_file=registry_file, project_id_value=pid, project_root=root, workspace=metadata)

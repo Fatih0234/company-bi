@@ -283,9 +283,10 @@ Build the report with proper syntax, using your plan and documentation as refere
 4. Use documentation-verified syntax from Phase 5
 5. Apply the Report Philosophy (insight-first, one sentence per chart, charts as evidence)
 6. Make small, focused changes — one section at a time
-7. After writing, call `check_evidence_health` to catch build and render-overlay errors
-8. Check the rendered preview in CMUX when possible, including console/errors before screenshotting
-9. Fix visible errors before reporting completion
+7. After writing, **respond to any Post-Write SQL Health Check Reminders** — if the quality guard reports unvalidated queries, run them via `duckdb_run_sql` and fix any that return errors or empty results
+8. Run `check_evidence_health` to catch build and render-overlay errors
+9. Check the rendered preview in CMUX when possible, including console/errors before screenshotting
+10. Fix visible errors before reporting completion
 
 *Quality bar:**
 - Every chart has a tested SQL query behind it
@@ -521,7 +522,49 @@ Use the project-local Pi commands when they help orient the user:
 
 ## Validation workflow
 
-Before publishing or declaring completion:
+The quality guard uses **tiered enforcement** to balance safety with productivity:
+
+### What gets hard-blocked (prevents write)
+
+**Static analysis errors that crash the page:**
+- Angle brackets in plain text (e.g., `<50%`, `<$100`)
+- Unclosed Svelte components
+- Invalid `fmt=` values with spaces or special characters
+- `_pct` columns in `stacked100` charts
+- `seriesColors` mismatches with y columns
+- `swapXY` with incompatible axes
+
+These WILL break the page at render time, so they must be fixed before writing.
+
+### What gets a post-write reminder (write succeeds, then nudge)
+
+**SQL validation issues:**
+- Queries not found in validation cache (hash mismatch)
+- Queries that returned 0 rows (empty datasets)
+- Missing query references in components
+
+**Process enforcement:**
+- Missing Insight Candidate Scan in draft.md
+- No data profiling detected
+- Component docs not read
+
+After a successful write, you'll see a **📋 Post-Write SQL Health Check Reminder** with:
+- List of unvalidated queries with line numbers
+- List of empty datasets
+- Next steps to verify and fix issues
+
+### How to respond to post-write reminders
+
+1. **Run unvalidated queries** via `duckdb_run_sql` to verify they return data
+2. **Debug empty queries** — check table names, column names, and filters
+3. **Run `check_evidence_health`** to verify the build compiles
+4. **Check the preview** in CMUX browser to verify charts render with data
+
+If any query returns 0 rows or errors, fix the SQL and re-write the affected section.
+
+### Final gate before publishing
+
+Run `evidence_dashboard_readiness` to check all quality gates (including SQL validation) before marking a dashboard as complete. This acts as a final publish gate — even if you ignored post-write reminders, you can't publish without addressing them.
 
 ```bash
 <workspace-helper> preview-url

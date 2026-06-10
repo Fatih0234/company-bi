@@ -5,7 +5,9 @@ import type { DuckDbBiConfig } from "../types";
 import { appendAuditEntry, createQueryId, trimSql } from "../lib/audit-log";
 import { runDuckDbJson } from "../lib/duckdb-cli";
 import { discoverDataFiles, ensureRuntimeDirs, withProjectRoot } from "../lib/paths";
-import { discoverEvidenceSources } from "../lib/evidence-sources";
+import { discoverEvidenceSources, readEvidenceSourceSql } from "../lib/evidence-sources";
+import { coerceNumber } from "../lib/result-parser";
+import { tableSourceForFile } from "../lib/sql-safety";
 import { toolResponse } from "../lib/tool-result";
 
 const Parameters = Type.Object({
@@ -30,6 +32,7 @@ export function registerListTablesTool(pi: ExtensionAPI, baseConfig: DuckDbBiCon
       const viewClause = includeViews ? "" : "AND table_type <> 'VIEW'";
       const sql = `SELECT table_catalog AS database, table_schema AS schema, table_name AS name, table_type AS type FROM information_schema.tables WHERE ${where} ${viewClause} ORDER BY table_schema, table_name`;
       const queryId = createQueryId(sql);
+      const queryIds = [queryId];
       let databaseSchemas: any[] = [];
       let elapsedMs = 0;
       try {
@@ -60,27 +63,78 @@ export function registerListTablesTool(pi: ExtensionAPI, baseConfig: DuckDbBiCon
         });
         databaseSchemas = [];
       }
-      const evidenceTables = (await discoverEvidenceSources(config)).map((source) => ({
+      const evidenceTables = await Promise.all((await discoverEvidenceSources(config)).map(async (source) => ({
         name: source.qualifiedName,
         type: "view" as const,
         source_type: "evidence_sql" as const,
         source_path: source.path,
         recommended_for_dashboard: true,
-      }));
-      const fileTables = (await discoverDataFiles(config)).filter((file) => file.type !== "duckdb").map((file) => ({
+        row_count: params.include_counts ? await countEvidenceSourceRows(config, source, params.database, signal, queryIds) : undefined,
+      })));
+      const fileTables = await Promise.all((await discoverDataFiles(config)).filter((file) => file.type !== "duckdb").map(async (file) => ({
         name: file.alias,
         type: "view" as const,
         source_type: "file" as const,
         source_path: file.path,
         recommended_for_dashboard: false,
-        row_count: params.include_counts ? undefined : undefined,
-      }));
+        row_count: params.include_counts ? await countFileRows(config, file.path, params.database, signal, queryIds) : undefined,
+      })));
       const schemas = [...databaseSchemas];
       if (evidenceTables.length) schemas.push({ database: "project", schema: "evidence_sources", tables: evidenceTables });
       if (fileTables.length) schemas.push({ database: "project", schema: "files", tables: fileTables });
-      return toolResponse({ ok: true, schemas, elapsed_ms: elapsedMs, query_id: queryId });
+      return toolResponse({ ok: true, schemas, elapsed_ms: elapsedMs, query_id: queryId, query_ids: queryIds });
     },
   }));
+}
+
+async function countFileRows(config: DuckDbBiConfig, filePath: string, database: string | undefined, signal: AbortSignal | undefined, queryIds: string[]): Promise<number | undefined> {
+  try {
+    const source = tableSourceForFile(config, filePath);
+    return await countRows(config, source.sql, database, signal, queryIds);
+  } catch {
+    return undefined;
+  }
+}
+
+async function countEvidenceSourceRows(config: DuckDbBiConfig, source: any, database: string | undefined, signal: AbortSignal | undefined, queryIds: string[]): Promise<number | undefined> {
+  try {
+    const sourceSql = await readEvidenceSourceSql(config, source);
+    return await countRows(config, sourceSql, database, signal, queryIds);
+  } catch {
+    return undefined;
+  }
+}
+
+async function countRows(config: DuckDbBiConfig, sourceSql: string, database: string | undefined, signal: AbortSignal | undefined, queryIds: string[]): Promise<number | undefined> {
+  const countSql = `SELECT COUNT(*) AS row_count FROM ${sourceSql}`;
+  const countId = createQueryId(countSql);
+  try {
+    const result = await runDuckDbJson(config, { sql: countSql, database, readonly: true, signal });
+    queryIds.push(countId);
+    await appendAuditEntry(config, {
+      query_id: countId,
+      tool_name: TOOL_NAMES.listTables,
+      timestamp: new Date().toISOString(),
+      sql: trimSql(countSql),
+      database,
+      elapsed_ms: result.elapsedMs,
+      row_count: result.rowCount,
+      truncated: false,
+      status: "ok",
+    });
+    return coerceNumber(result.rows[0]?.row_count, 0);
+  } catch (err) {
+    await appendAuditEntry(config, {
+      query_id: countId,
+      tool_name: TOOL_NAMES.listTables,
+      timestamp: new Date().toISOString(),
+      sql: trimSql(countSql),
+      database,
+      status: "error",
+      error_message: (err as Error).message,
+    });
+    return undefined;
+  }
 }
 
 function groupRows(rows: Array<Record<string, unknown>>) {

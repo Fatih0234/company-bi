@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -99,6 +102,41 @@ class AgentContextContractTests(unittest.TestCase):
             registered = set(pi[section])
             for path in paths:
                 self.assertIn(path, registered, f"critical {section} asset is not registered: {path}")
+
+    def test_pi_full_repairs_broad_workspace_pi_extension_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            fake_bin = Path(tmp) / "bin"
+            workspace.mkdir()
+            fake_bin.mkdir()
+            (workspace / ".cmux").mkdir()
+            (workspace / ".cmux" / "workspace.json").write_text("{}\n")
+            (workspace / ".pi").mkdir()
+            (workspace / ".pi" / "extensions").symlink_to(REPO_ROOT / "pi-pkg" / "extensions", target_is_directory=True)
+
+            fake_pi = fake_bin / "pi"
+            fake_pi.write_text("#!/usr/bin/env bash\nprintf 'fake pi %s\\n' \"$*\"\n")
+            fake_pi.chmod(0o755)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            result = subprocess.run(
+                [str(REPO_ROOT / "bin" / "pi-full"), "--version"],
+                cwd=workspace,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+
+            self.assertIn("fake pi", result.stdout)
+            extensions = workspace / ".pi" / "extensions"
+            self.assertTrue(extensions.is_dir())
+            self.assertFalse(extensions.is_symlink())
+            self.assertTrue((extensions / "evidence-context.ts").is_symlink())
+            self.assertTrue((extensions / "evidence-health-check.ts").is_symlink())
+            self.assertFalse((extensions / "evidence-health-check.test.ts").exists())
 
 
 if __name__ == "__main__":
