@@ -931,6 +931,91 @@ def write_pi_context(target: Path, metadata: dict[str, Any], config: dict[str, A
     return context_path
 
 
+def render_workspace_agents_md(metadata: dict[str, Any], config: dict[str, Any]) -> str:
+    allowed = string_list_config(config, "allowedAgentPaths", ["pages/**", "queries/**", "reports/**", "data/**"])
+    ask = string_list_config(config, "askBeforeAgentPaths", ["sources/**", "components/**"])
+    blocked = string_list_config(config, "blockedAgentPaths", [".env*", "**/connection.yaml", ".github/**"])
+    helper_root = Path(str(metadata.get("runtimeRoot") or config.get("runtimeRoot") or ".")).expanduser().resolve()
+    helper_command = helper_root / "bin" / "cmux-evidence"
+    title = str(metadata.get("title") or "Evidence analysis")
+    slug = str(metadata.get("slug") or "")
+    url = str(metadata.get("url") or config.get("url") or "")
+    pages = metadata.get("pages") if isinstance(metadata.get("pages"), dict) else {}
+    brief_page = str(pages.get("brief") or metadata.get("page") or "pages/index.md")
+    draft_page = str(pages.get("draft") or "pages/draft.md")
+    report_page = str(pages.get("report") or "pages/report.md")
+
+    def bullets(values: list[str]) -> str:
+        return "\n".join(f"- `{value}`" for value in values)
+
+    return f"""# AGENTS.md
+
+## Workspace Type
+
+This is a LUMEN content-only Evidence analysis workspace.
+
+- Title: {title}
+- Slug: {slug or "not recorded"}
+- Preview URL: {url or "not recorded"}
+- Runtime helper: `{helper_command}`
+
+Edit analysis content here. Runtime code, source connectors, dependencies, and generated Evidence app files live outside this workspace.
+
+## Read First
+
+- `.cmux/workspace.json` - title, intention, page paths, preview URL, runtime roots, and status.
+- `.cmux/evidence.json` - commands, port, runtime helper configuration, and safe edit policy.
+- `{brief_page}` - human-readable workspace brief and analysis goal.
+
+## Edit Boundaries
+
+Allowed by default:
+
+{bullets(allowed)}
+
+Ask before editing:
+
+{bullets(ask)}
+
+Do not read or edit:
+
+{bullets(blocked)}
+
+Do not edit the shadow runtime or runtime root directly unless the user explicitly asks for runtime/source changes.
+
+## Page Roles
+
+- `{brief_page}` - workspace brief and map. Keep it aligned with `.cmux/workspace.json` when the goal changes.
+- `{draft_page}` - private exploration, scratch SQL, and report planning.
+- `{report_page}` - polished publishable report.
+- `queries/**` - reusable analysis SQL that should travel with the report.
+- `data/**` - local analysis inputs. Treat these as private unless the user explicitly says otherwise.
+
+## Data Rules
+
+- Run `{helper_command} data refresh` after adding files under `data/`.
+- Evidence page SQL must use registered source names such as `files.orders`.
+- Do not use `read_csv_auto()`, `read_parquet()`, `read_json_auto()`, or raw file paths inside `pages/*.md` SQL blocks.
+- Use ad-hoc DuckDB/file readers only for exploration outside Evidence page SQL.
+
+## Validation
+
+- Use `{helper_command} validate` before declaring dashboard work complete.
+- Use `{helper_command} preview-url` to find the local Evidence preview.
+- Inspect the browser preview when CMUX/browser access is available, especially after substantial page changes.
+
+## Privacy
+
+Publishing shares `{report_page}` and `queries/**` by default. Draft pages, local data, DuckDB scratch files, credentials, and runtime files stay private unless the user explicitly requests otherwise.
+"""
+
+
+def write_workspace_agents_md(target: Path, metadata: dict[str, Any], config: dict[str, Any]) -> Path:
+    path = target / "AGENTS.md"
+    path.write_text(render_workspace_agents_md(metadata, config))
+    return path
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -1219,6 +1304,7 @@ def new_content_analysis(title: str, *, print_layout: bool = False, open_after_c
             root_config=config, pid=pid, port=port, url=url, workspace_root=workspace_root, shadow_root=shadow_root, root=root
         )
         write_json(workspace_root / ".cmux" / "evidence.json", workspace_config)
+        write_workspace_agents_md(workspace_root, metadata, workspace_config)
         write_pi_context(workspace_root, metadata, workspace_config)
         # Symlink pi-pkg/ subdirectories into the workspace's .pi/ so the Pi agent
         # (running from workspace root) can discover skills, prompts, extensions,

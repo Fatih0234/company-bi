@@ -98,6 +98,7 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
         self.assertTrue((workspace / "pages" / "index.md").is_file())
         self.assertTrue((workspace / "pages" / "draft.md").is_file())
         self.assertTrue((workspace / "pages" / "report.md").is_file())
+        self.assertTrue((workspace / "AGENTS.md").is_file())
         self.assertIn("## Start Here", (workspace / "pages" / "index.md").read_text())
         self.assertIn("## Files in this workspace", (workspace / "pages" / "index.md").read_text())
         self.assertIn("## Publish & privacy", (workspace / "pages" / "index.md").read_text())
@@ -141,6 +142,30 @@ class CmuxEvidenceContentWorkspaceTests(unittest.TestCase):
             registry["projects"]["test-project"]["workspaces"]["airport-demand"]["workspaceRoot"],
             str(workspace),
         )
+
+    def test_content_workspace_agents_md_contains_generic_agent_rules(self):
+        self.run_cmd("new", "--no-open", "Agent Instructions")
+        workspace = self.workspace_dir / "agent-instructions"
+        agents_md = (workspace / "AGENTS.md").read_text()
+
+        self.assertIn("LUMEN content-only Evidence analysis workspace", agents_md)
+        self.assertIn("Runtime helper:", agents_md)
+        self.assertIn(str(self.root / "bin" / "cmux-evidence"), agents_md)
+        self.assertIn("`.cmux/workspace.json`", agents_md)
+        self.assertIn("`pages/index.md`", agents_md)
+        self.assertIn("`pages/draft.md`", agents_md)
+        self.assertIn("`pages/report.md`", agents_md)
+        self.assertIn("`pages/**`", agents_md)
+        self.assertIn("`reports/**`", agents_md)
+        self.assertIn("`data/**`", agents_md)
+        self.assertIn("`package.json`", agents_md)
+        self.assertIn("`bin/**`", agents_md)
+        self.assertIn("`scripts/**`", agents_md)
+        self.assertIn("files.orders", agents_md)
+        self.assertIn("Do not use `read_csv_auto()`", agents_md)
+        self.assertIn("validate` before declaring dashboard work complete", agents_md)
+        self.assertIn("Publishing shares `pages/report.md` and `queries/**` by default", agents_md)
+        self.assertNotIn("/Users/fatihkarahan/.opensrc", agents_md)
 
     def test_open_print_layout_uses_split_roots_for_content_workspace(self):
         self.run_cmd("new", "--no-open", "Split Root")
