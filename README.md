@@ -113,6 +113,8 @@ SELECT region, SUM(revenue) FROM read_csv_auto('data/orders.csv') GROUP BY 1
 The agent can see the browser preview and validate rendering before
 telling you the dashboard is ready.
 
+![LUMEN Interface — Pi agent (left), Evidence dashboard (top right), dev server (bottom right)](examples/swiftride/images/LUME-interface.png)
+
 ## What makes this different
 
 ### Insight-first methodology
