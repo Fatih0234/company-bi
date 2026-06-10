@@ -63,11 +63,12 @@ test("does NOT flag Evidence components", () => {
 `;
   const issues = analyzeEvidenceMarkdown(content);
   
-  // Should not have issues about BarChart or DataTable
-  const hasComponentIssue = issues.some(i => 
-    i.message.includes("BarChart") || i.message.includes("DataTable")
+  // Should not have errors about BarChart or DataTable tags.
+  const hasComponentError = issues.some(i =>
+    i.severity === "error" &&
+    (i.message.includes("BarChart") || i.message.includes("DataTable"))
   );
-  assert.equal(hasComponentIssue, false, "should not flag Evidence components");
+  assert.equal(hasComponentError, false, "should not flag Evidence components");
 });
 
 test("ignores angle brackets in code blocks", () => {
@@ -95,6 +96,80 @@ Use \`id < 100\` to filter.
   
   const hasAngleIssue = issues.some(i => i.message.includes("<100"));
   assert.equal(hasAngleIssue, false, "should not flag angle brackets in inline code");
+});
+
+test("detects <50% inside component text content", () => {
+  const content = `
+<Callout type="info">
+Green zones have <50% yellow share.
+</Callout>
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+
+  const hasAngleIssue = issues.some(i => i.message.includes("<50%"));
+  assert.ok(hasAngleIssue, "should detect <50%");
+});
+
+test("does NOT flag prose that says below 50%", () => {
+  const content = `
+<Callout type="info">
+Green zones have below 50% yellow share.
+</Callout>
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+
+  const hasAngleIssue = issues.some(i => i.message.includes("Expected valid tag name"));
+  assert.equal(hasAngleIssue, false, "should not flag safe prose");
+});
+
+// ---------------------------------------------------------------------------
+// analyzeEvidenceMarkdown - Markdown lists inside components
+// ---------------------------------------------------------------------------
+
+test("detects markdown list inside Callout component", () => {
+  const content = `
+<Callout type="warning">
+**Warning:**
+
+- Item 1
+- Item 2
+</Callout>
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+
+  assert.ok(issues.length > 0, "should detect markdown list inside Callout");
+  const hasListIssue = issues.some(i => i.message.includes("Markdown list item"));
+  assert.ok(hasListIssue, "should have issue about markdown list");
+});
+
+test("does NOT flag HTML list inside Callout component", () => {
+  const content = `
+<Callout type="warning">
+<ul>
+  <li>Item 1</li>
+  <li>Item 2</li>
+</ul>
+</Callout>
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+
+  const hasListIssue = issues.some(i => i.message.includes("Markdown list item"));
+  assert.equal(hasListIssue, false, "should allow explicit HTML lists");
+});
+
+test("does NOT flag markdown list inside Grid component", () => {
+  const content = `
+<Grid cols=2>
+
+- Left cell note
+- Right cell note
+
+</Grid>
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+
+  const hasListIssue = issues.some(i => i.message.includes("Markdown list item"));
+  assert.equal(hasListIssue, false, "should allow markdown lists inside layout components");
 });
 
 // ---------------------------------------------------------------------------
@@ -371,7 +446,8 @@ test("handles content with only components", () => {
 <DataTable data={query} />
 `;
   const issues = analyzeEvidenceMarkdown(content);
-  assert.equal(issues.length, 0, "should have no issues for component-only content");
+  const errors = issues.filter(i => i.severity === "error");
+  assert.equal(errors.length, 0, "should have no errors for component-only content");
 });
 
 test("handles very long content", () => {

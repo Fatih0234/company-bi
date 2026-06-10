@@ -52,6 +52,8 @@ const VALID_ENTITIES = new Set([
   'lrm', 'rlm', 'dagger', 'Dagger', 'permil', 'lsaquo', 'rsaquo',
 ]);
 
+const MARKDOWN_LIST_COMPONENT_EXEMPTIONS = new Set(['Grid', 'Tabs', 'Tab']);
+
 // ── Chart Component Extraction ──────────────────────────────────────
 
 interface ChartComponent {
@@ -450,6 +452,68 @@ function detectYLogWithStacked(content: string): RenderingIssue[] {
   return issues;
 }
 
+function detectMarkdownListsInsideComponents(content: string): RenderingIssue[] {
+  const issues: RenderingIssue[] = [];
+  const lines = content.split('\n');
+  const componentStack: Array<{ name: string; line: number }> = [];
+
+  let inCodeBlock = false;
+  let inFrontMatter = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const lineNum = i + 1;
+
+    if (trimmed === '---') {
+      inFrontMatter = !inFrontMatter;
+      continue;
+    }
+    if (inFrontMatter) continue;
+
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    const activeComponent = [...componentStack]
+      .reverse()
+      .find(component => !MARKDOWN_LIST_COMPONENT_EXEMPTIONS.has(component.name));
+
+    if (activeComponent && /^(\s*)([-*+]\s+|\d+\.\s+)/.test(line)) {
+      issues.push({
+        line: lineNum,
+        message: `Markdown list item found inside <${activeComponent.name}>. Markdown lists inside Evidence components can produce invalid nested HTML and leave the component open.`,
+        fixHint: `Move the list outside <${activeComponent.name}> or use explicit HTML <ul><li>...</li></ul> inside the component.`,
+        severity: 'error',
+      });
+    }
+
+    const tagRegex = /<\/?([A-Z][A-Za-z0-9]*)\b[^>]*>/g;
+    let match: RegExpExecArray | null;
+    while ((match = tagRegex.exec(line)) !== null) {
+      const fullTag = match[0];
+      const componentName = match[1];
+      if (!EVIDENCE_COMPONENTS.has(componentName)) continue;
+
+      if (fullTag.startsWith('</')) {
+        const stackIndex = componentStack.map(c => c.name).lastIndexOf(componentName);
+        if (stackIndex >= 0) {
+          componentStack.splice(stackIndex, 1);
+        }
+        continue;
+      }
+
+      if (!fullTag.endsWith('/>')) {
+        componentStack.push({ name: componentName, line: lineNum });
+      }
+    }
+  }
+
+  return issues;
+}
+
 // ── Front Matter Validation ─────────────────────────────────────────
 
 /**
@@ -554,8 +618,9 @@ function analyzeMarkdownSyntax(content: string): RenderingIssue[] {
     for (let j = 0; j < parts.length; j += 2) {
       const text = parts[j];
       
-      // Check for dangerous angle brackets
-      const dangerousAngleRegex = /<(?![a-zA-Z\/\!])\S/g;
+      // Check for literal comparisons like <50%, <$100, or <3 items.
+      // Svelte parses these as invalid HTML tags unless escaped or reworded.
+      const dangerousAngleRegex = /<(?=\d|[$€£¥]|[+\-=~])\S*/g;
       let match;
       while ((match = dangerousAngleRegex.exec(text)) !== null) {
         const snippet = text.slice(match.index, Math.min(match.index + 15, text.length));
@@ -616,6 +681,7 @@ export function analyzeEvidenceMarkdown(content: string): RenderingIssue[] {
   
   // Markdown syntax issues
   issues.push(...analyzeMarkdownSyntax(content));
+  issues.push(...detectMarkdownListsInsideComponents(content));
   
   // Evidence-specific pattern issues
   issues.push(...detectSvelteFmtHazards(content));

@@ -278,16 +278,20 @@ Build the report with proper syntax, using your plan and documentation as refere
 
 **Process:**
 1. Write SQL queries for each chart/section — test via `duckdb_run_sql` first
-2. Write the Evidence `.md` page following your plan exactly
-3. Use documentation-verified syntax from Phase 5
-4. Apply the Report Philosophy (insight-first, one sentence per chart, charts as evidence)
-5. Make small, focused changes — one section at a time
-6. Check the rendered preview in CMUX when possible
-7. Fix visible errors before reporting completion
+2. Draft the Evidence `.md` page following your plan exactly
+3. Before writing the page, call `evidence_validate_page` when the draft file exists or after staging content in draft.md
+4. Use documentation-verified syntax from Phase 5
+5. Apply the Report Philosophy (insight-first, one sentence per chart, charts as evidence)
+6. Make small, focused changes — one section at a time
+7. After writing, call `check_evidence_health` to catch build and render-overlay errors
+8. Check the rendered preview in CMUX when possible, including console/errors before screenshotting
+9. Fix visible errors before reporting completion
 
 *Quality bar:**
 - Every chart has a tested SQL query behind it
 - Every component uses verified props (no guessing)
+- The page passes `evidence_validate_page` before or immediately after write
+- The page passes `check_evidence_health` after write
 - The narrative leads with insights, not data descriptions
 - Filters are purposeful, not decorative
 - KPIs at top tell the story at a glance
@@ -455,8 +459,11 @@ When the user asks whether the dashboard looks correct, or after substantial edi
    - `cmux browser <surface> scroll --dy <viewport-height>` to advance
    - `cmux browser <surface> screenshot --out /tmp/evidence-preview-<n>.png`
    - Repeat until the bottom of the page is reached
-6. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
-7. Report what was visually confirmed and what still requires human judgment.
+6. Check browser diagnostics before treating screenshots as valid:
+   - `cmux browser <surface> errors list`
+   - `cmux browser <surface> console list`
+7. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
+8. Report what was visually confirmed and what still requires human judgment.
 
 ### Full-page validation checklist
 

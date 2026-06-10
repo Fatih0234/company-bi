@@ -71,6 +71,30 @@ const EVIDENCE_COMPONENTS = new Set([
   'Grid', 'Accordion', 'Alert', 'Callout', 'Tabs', 'Tab',
 ]);
 
+const COMPONENT_DOC_ROUTES: Record<string, string> = {
+  BarChart: 'components/charts/bar-chart/index.md',
+  LineChart: 'components/charts/line-chart/index.md',
+  AreaChart: 'components/charts/area-chart/index.md',
+  BubbleChart: 'components/charts/bubble-chart/index.md',
+  ScatterPlot: 'components/charts/scatter-plot/index.md',
+  Histogram: 'components/charts/histogram/index.md',
+  PieChart: 'components/charts/pie-chart/index.md',
+  FunnelChart: 'components/charts/funnel-chart/index.md',
+  CalendarHeatmap: 'components/charts/calendar-heatmap/index.md',
+  SankeyChart: 'components/charts/sankey-diagram/index.md',
+  BigValue: 'components/data/big-value/index.md',
+  DataTable: 'components/data/data-table/index.md',
+  Dropdown: 'components/inputs/dropdown/index.md',
+  ButtonGroup: 'components/inputs/button-group/index.md',
+  DateRange: 'components/inputs/date-range/index.md',
+  Grid: 'components/ui/grid/index.md',
+  Accordion: 'components/ui/accordion/index.md',
+  Alert: 'components/ui/alert/index.md',
+  Callout: 'components/ui/callout/index.md',
+  Tabs: 'components/ui/tabs/index.md',
+  Tab: 'components/ui/tabs/index.md',
+};
+
 // ── Bash Command Patterns ─────────────────────────────────────────
 
 /**
@@ -106,6 +130,35 @@ function extractTargetFilesFromCommand(command: string): string[] {
   return files;
 }
 
+function normalizeDocPath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^.*sites\/docs\/pages\//, '');
+}
+
+function componentFromDocPath(path: string): string | null {
+  const normalized = normalizeDocPath(path);
+  for (const [component, route] of Object.entries(COMPONENT_DOC_ROUTES)) {
+    if (normalized.endsWith(route)) {
+      return component;
+    }
+  }
+  return null;
+}
+
+function extractEvidenceComponents(content: string): string[] {
+  const components = new Set<string>();
+  const componentRegex = /<([A-Z][A-Za-z0-9]*)\b/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = componentRegex.exec(content)) !== null) {
+    const componentName = match[1];
+    if (EVIDENCE_COMPONENTS.has(componentName)) {
+      components.add(componentName);
+    }
+  }
+
+  return Array.from(components).sort();
+}
+
 // ── Main Extension ──────────────────────────────────────────────────
 
 export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
@@ -117,6 +170,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
   const sessionState = {
     profilingCalls: new Set<string>(),  // table names that were profiled
     docReads: new Set<string>(),        // documentation files that were read
+    componentDocReads: new Set<string>(), // Evidence components with specific docs read
     validationCalls: new Set<string>(), // pages that were validated (review activity)
     hasProfiledData: false,             // any profiling call made
     hasReadDocs: false,                 // any doc read made
@@ -134,7 +188,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     // Restore profiling/doc/review state from session entries
     for (const entry of ctx.sessionManager.getEntries()) {
       if (entry.type === 'custom' && entry.customType === 'evidence-quality-session') {
-        const data = entry.data as { profilingCalls?: string[]; docReads?: string[]; validationCalls?: string[] } | undefined;
+        const data = entry.data as { profilingCalls?: string[]; docReads?: string[]; componentDocReads?: string[]; validationCalls?: string[] } | undefined;
         if (data?.profilingCalls) {
           data.profilingCalls.forEach(t => sessionState.profilingCalls.add(t));
           sessionState.hasProfiledData = sessionState.profilingCalls.size > 0;
@@ -142,6 +196,14 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
         if (data?.docReads) {
           data.docReads.forEach(d => sessionState.docReads.add(d));
           sessionState.hasReadDocs = sessionState.docReads.size > 0;
+        }
+        if (data?.componentDocReads) {
+          data.componentDocReads.forEach(c => sessionState.componentDocReads.add(c));
+        } else {
+          for (const docPath of sessionState.docReads) {
+            const componentName = componentFromDocPath(docPath);
+            if (componentName) sessionState.componentDocReads.add(componentName);
+          }
         }
         if (data?.validationCalls) {
           data.validationCalls.forEach(v => sessionState.validationCalls.add(v));
@@ -168,6 +230,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     pi.appendEntry('evidence-quality-session', {
       profilingCalls: Array.from(sessionState.profilingCalls),
       docReads: Array.from(sessionState.docReads),
+      componentDocReads: Array.from(sessionState.componentDocReads),
       validationCalls: Array.from(sessionState.validationCalls),
     });
   }
@@ -250,11 +313,16 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
         if (isDoc) {
           sessionState.docReads.add(path);
           sessionState.hasReadDocs = true;
+          const componentName = componentFromDocPath(path);
+          if (componentName) {
+            sessionState.componentDocReads.add(componentName);
+          }
           persistSessionState();
           
           if (ctx.hasUI) {
+            const componentSuffix = componentName ? ` for ${componentName}` : '';
             ctx.ui.notify(
-              `📚 Documentation read: ${path.split('/').pop()} (${sessionState.docReads.size} docs read)`,
+              `📚 Documentation read${componentSuffix}: ${path.split('/').pop()} (${sessionState.docReads.size} docs read)`,
               'info',
             );
           }
@@ -368,29 +436,33 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
     
     // ── Documentation Lookup Enforcement ────────────────────────
     // Before writing to pages with Evidence components, verify that
-    // documentation was consulted. This prevents guessing component props.
-    if (!isExemptPage && !sessionState.hasReadDocs) {
-      // Check if the page contains Evidence components
-      const componentMatches = content.match(/<(\w+)/g) || [];
-      const hasComponents = componentMatches.some(match => {
-        const componentName = match.slice(1); // Remove '<'
-        return EVIDENCE_COMPONENTS.has(componentName);
+    // the specific component docs were consulted. This prevents a broad
+    // skill/doc read from bypassing component-level prop checks.
+    if (!isExemptPage) {
+      const usedComponents = extractEvidenceComponents(content);
+      const missingDocComponents = usedComponents.filter(componentName => {
+        return COMPONENT_DOC_ROUTES[componentName] && !sessionState.componentDocReads.has(componentName);
       });
-      
-      if (hasComponents) {
+
+      if (missingDocComponents.length > 0) {
+        const missingList = missingDocComponents
+          .map(componentName => `- ${componentName}: ${COMPONENT_DOC_ROUTES[componentName]}`)
+          .join('\n');
         return {
           block: true,
           reason: [
-            'PAGE WRITE BLOCKED — No documentation consulted',
+            'PAGE WRITE BLOCKED — Missing component documentation lookup',
             '',
-            'Before writing pages with Evidence components (BarChart, LineChart, BigValue, etc.),',
-            'you must first read the component documentation:',
+            'Before writing pages with Evidence components, read the specific docs for each component used.',
+            'Reading a general skill file or docs index is not enough for component-heavy report pages.',
             '',
-            '1. Read `.agent/docs/evidence-oss/ROUTES.md` for task-based routing',
-            '2. Follow links to specific component documentation',
-            '3. Extract exact props, syntax, and patterns',
+            'Missing component docs:',
+            missingList,
             '',
-            'This prevents guessing component props and getting them wrong.',
+            'Required workflow:',
+            '1. Read `.agent/docs/evidence-oss/ROUTES.md` for routing',
+            '2. Follow links to each component documentation file listed above',
+            '3. Extract exact props, syntax, and patterns before writing the page',
             '',
             'Example:',
             '- WRONG: `<BarChart data={query} x=zone y=revenue series=count />` (guessing series prop)',
@@ -682,7 +754,7 @@ export default function evidenceQualityGuardExtension(pi: ExtensionAPI) {
         name: 'Documentation Consulted',
         passed: sessionState.hasReadDocs,
         details: sessionState.hasReadDocs
-          ? `${sessionState.docReads.size} docs read`
+          ? `${sessionState.docReads.size} docs read (${sessionState.componentDocReads.size} component docs)`
           : 'No documentation read. Read .agent/docs/evidence-oss/ before building.',
       });
       

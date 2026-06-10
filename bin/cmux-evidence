@@ -1741,6 +1741,26 @@ def surface_url(surface: dict[str, Any]) -> str:
     return ""
 
 
+def urls_match(actual: str, expected: str) -> bool:
+    return actual.rstrip("/") == expected.rstrip("/")
+
+
+def browser_surface_refs(surfaces: list[dict[str, Any]]) -> set[str]:
+    refs: set[str] = set()
+    for surface in surfaces:
+        ref = surface_ref(surface)
+        if ref:
+            refs.add(ref)
+    return refs
+
+
+def refresh_surface_url(surface: str) -> str:
+    completed = run_cmux(["browser", surface, "get", "url"])
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    return ""
+
+
 def list_browser_surfaces() -> tuple[list[dict[str, Any]], str]:
     workspace = cmux_workspace_id()
     if not workspace:
@@ -1812,6 +1832,13 @@ def preview_open_command() -> int:
         print("CMUX_WORKSPACE_ID is not set; open this URL in a browser pane from CMUX.", file=sys.stderr)
         return 0
 
+    before_refs: set[str] = set()
+    try:
+        before_surfaces, _raw = list_browser_surfaces()
+        before_refs = browser_surface_refs(before_surfaces)
+    except ValueError:
+        before_refs = set()
+
     try:
         completed = run_cmux(
             [
@@ -1835,7 +1862,66 @@ def preview_open_command() -> int:
         print(completed.stdout, end="")
     if completed.stderr:
         print(completed.stderr, end="", file=sys.stderr)
-    return completed.returncode
+    if completed.returncode != 0:
+        return completed.returncode
+
+    try:
+        after_surfaces, _raw = list_browser_surfaces()
+    except ValueError as exc:
+        print(
+            f"Preview pane opened, but browser surface verification failed: {exc}",
+            file=sys.stderr,
+        )
+        return 0
+
+    matching = [
+        surface for surface in after_surfaces
+        if urls_match(surface_url(surface), url)
+    ]
+    if matching:
+        ref = surface_ref(matching[0])
+        if ref:
+            print(f"Preview verified on {ref}: {surface_url(matching[0])}", file=sys.stderr)
+        return 0
+
+    new_surfaces = [
+        surface for surface in after_surfaces
+        if (surface_ref(surface) or "") not in before_refs
+    ]
+    candidates = new_surfaces or [
+        surface for surface in after_surfaces
+        if not surface_url(surface) or surface_url(surface).startswith(("about:", "https://kagi.com/"))
+    ]
+    if not candidates:
+        choices = []
+        for surface in after_surfaces:
+            ref = surface_ref(surface) or "<unknown>"
+            choices.append(f"- {ref} {surface_url(surface)}".rstrip())
+        return error(
+            "Preview pane opened, but no browser surface is on the preview URL. "
+            f"Expected {url}. Surfaces:\n" + "\n".join(choices)
+        )
+
+    ref = surface_ref(candidates[0])
+    if not ref:
+        return error(f"Preview pane opened, but the candidate browser surface has no ref. Expected {url}.")
+
+    goto_completed = run_cmux(["browser", ref, "goto", url])
+    if goto_completed.returncode != 0:
+        return error(
+            f"Preview pane opened, but explicit navigation failed for {ref}: "
+            f"{(goto_completed.stderr or goto_completed.stdout).strip()}"
+        )
+
+    final_url = refresh_surface_url(ref)
+    if not urls_match(final_url, url):
+        return error(
+            f"Preview pane opened, but {ref} did not navigate to the preview URL. "
+            f"Expected {url}; got {final_url or '<blank>'}."
+        )
+
+    print(f"Preview verified on {ref}: {final_url}", file=sys.stderr)
+    return 0
 
 
 def choose_browser_surface() -> str:

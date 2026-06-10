@@ -18,10 +18,10 @@
  *   - Vite compilation failure (non-200 or error overlay in HTML)
  *   - Page routing errors (404/500 per page)
  *   - Missing JavaScript bundles (build broke client-side code)
+ *   - Common Svelte/Evidence error overlay messages embedded in HTML
  *
  * What it does NOT catch (use screenshots for these):
  *   - SQL query errors at runtime (rendered client-side)
- *   - Component "is not defined" errors (rendered client-side)
  *   - Empty charts or wrong data
  *   - Layout/spacing/visual issues
  */
@@ -30,7 +30,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { Type } from "@sinclair/typebox";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,10 +169,15 @@ const ERROR_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
 		description: "SQL error text",
 	},
 	// Component errors
-	{ pattern: /is not defined|is not a function|Cannot read propert/i, description: "Runtime JS error" },
+	{ pattern: /Component was left open/i, description: "Svelte component parse error" },
+	{ pattern: /Expected valid tag name/i, description: "Svelte invalid tag parse error" },
+	{ pattern: /Expected\s+&gt;|Expected\s+>/i, description: "Svelte expected tag close parse error" },
+	{ pattern: /ReferenceError/i, description: "Runtime reference error" },
+	{ pattern: /ParseError/i, description: "Svelte parse error" },
+	{ pattern: /is not defined|is not a function|Cannot read propert(?:y|ies)/i, description: "Runtime JS error" },
 ];
 
-function detectErrorsInHtml(html: string): string[] {
+export function detectErrorsInHtml(html: string): string[] {
 	const errors: string[] = [];
 	for (const { pattern, description } of ERROR_PATTERNS) {
 		if (pattern.test(html)) {
