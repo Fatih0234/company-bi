@@ -385,3 +385,48 @@ test("handles very long content", () => {
   // Should not crash and should handle long content
   assert.ok(Array.isArray(issues), "should return array of issues");
 });
+
+// ---------------------------------------------------------------------------
+// analyzeEvidenceMarkdown - Front matter validation
+// ---------------------------------------------------------------------------
+
+test("detects unquoted colon in frontmatter title", () => {
+  const content = `---
+title: Q1: Zone Strategy
+---
+
+# Dashboard
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+  
+  assert.ok(issues.length > 0, "should detect unquoted colon");
+  const hasYamlIssue = issues.some(i => i.message.includes("unquoted colon"));
+  assert.ok(hasYamlIssue, "should have YAML parsing issue");
+});
+
+test("does NOT flag quoted colon in frontmatter title", () => {
+  const content = `---
+title: "Q1: Zone Strategy"
+---
+
+# Dashboard
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+  
+  const hasYamlIssue = issues.some(i => i.message.includes("unquoted colon"));
+  assert.equal(hasYamlIssue, false, "should not flag quoted colon");
+});
+
+test("detects unquoted special characters in frontmatter", () => {
+  const content = `---
+title: Dashboard {v1}
+---
+
+# Dashboard
+`;
+  const issues = analyzeEvidenceMarkdown(content);
+  
+  assert.ok(issues.length > 0, "should detect unquoted special characters");
+  const hasYamlIssue = issues.some(i => i.message.includes("special characters"));
+  assert.ok(hasYamlIssue, "should have YAML parsing issue");
+});

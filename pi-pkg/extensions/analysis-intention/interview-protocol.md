@@ -11,8 +11,22 @@ This interview is a creative, collaborative session. The user may not have a cle
    - What tables/entities exist
    - What time fields, measures, dimensions, and categorical fields are available
    - What natural questions this data can answer
-3. **Synthesize a brief context summary** — 3-5 bullets of what the data contains and what natural analyses it supports.
-4. **Pass this summary** in the `context` field of `ask_user` so the user sees it before every question.
+3. **Profile the available data** — Run `duckdb_describe_table` and `duckdb_summarize_table` on registered tables (use `duckdb_data_sources` to find them). Check:
+   - **Date range**: What time period does the data actually cover? (min/max of date columns)
+   - **Row count**: Is this a sample or a full dataset?
+   - **Service/type coverage**: Do the categorical columns match what the user might expect?
+   - **Key dimensions**: What zones, boroughs, service types, vendors exist?
+4. **Surface data limitations BEFORE asking analysis questions** — If the data doesn't match what the user likely expects (based on the goal or common assumptions), tell them immediately in the first `ask_user` context:
+
+   > "Before we start: your data contains [X rows] covering [date range].
+   > This is [a sample / the full dataset / limited to Y service types].
+   > Does this match what you expected, or do you need to add more data?"
+
+   If the data looks complete and matches expectations, note it briefly:
+   > "Your data contains [X rows] covering [date range] with [Y service types]."
+
+5. **Synthesize a brief context summary** — 3-5 bullets of what the data contains and what natural analyses it supports, **including any data limitations discovered**.
+6. **Pass this summary** in the `context` field of `ask_user` so the user sees it before every question. Include the data coverage summary in every subsequent question context.
 
 ## Asking questions — the golden rules
 

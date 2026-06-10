@@ -833,6 +833,17 @@ function buildDynamicEvidenceContext(root = findEvidenceRoot()): string {
 	}
 
 	// ── Data Access Rules (prominent, before source catalog) ──
+	// ── Required Workflow (enforced by evidence-quality-guard) ──
+	lines.push("", "## Required Dashboard Workflow", "");
+	lines.push("**Before writing to any dashboard page** (except draft.md and index.md), you MUST:", "");
+	lines.push("1. **Run evidence-bi-thinking skill** to generate an Insight Candidate Scan and Report Design Plan");
+	lines.push("2. **Write the plan to `pages/draft.md`** with sections `## Insight Candidate Scan` and `## Report Design Plan`");
+	lines.push("3. **Get user alignment** on the plan before proceeding");
+	lines.push("4. **Then write to the target page**");
+	lines.push("");
+	lines.push("This workflow is **enforced** — page writes will be blocked if draft.md is missing the required sections.");
+	lines.push("");
+
 	lines.push("", "## Data Access Rules", "");
 	lines.push("There are **two separate SQL execution contexts**. Mixing them up is the #1 error in Evidence dashboard work.");
 

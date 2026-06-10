@@ -162,7 +162,7 @@ export default function analysisIntentionExtension(pi: ExtensionAPI) {
     description:
       "Start the analysis intention interview for this workspace. Returns the interview protocol and current intention state. Call this first, then drive the interview using ask_user, and finish by calling save_intention_draft.",
     promptSnippet:
-      "Starts the analysis-intention interview and returns the protocol + current intention state. The interview is creative: before asking, read the source catalog and suggest 3-4 concrete options per field. Use ask_user with allowMultiple:true for multi-select fields (questions, stakeholders, successCriteria, dashboardOptions, assumptions, openQuestions). After core fields, do a final-suggestions step: review the brief and suggest 2-3 additional angles the user might have missed. Then call save_intention_draft.",
+      "Starts the analysis-intention interview and returns the protocol + current intention state. The interview is creative: before asking, read the source catalog AND profile the registered data tables (using duckdb_describe_table/duckdb_summarize_table) to understand date ranges, row counts, and service types. Surface any data limitations to the user immediately. Suggest 3-4 concrete options per field. Use ask_user with allowMultiple:true for multi-select fields (questions, stakeholders, successCriteria, dashboardOptions, assumptions, openQuestions). After core fields, do a final-suggestions step: review the brief and suggest 2-3 additional angles the user might have missed. Then call save_intention_draft.",
     promptGuidelines: [
       "Use start_analysis_intention to begin capturing the analysis brief for a new or existing workspace.",
       "Before asking, read sources/**/*.sql and .cmux/workspace.json to build context. Suggest 3-4 concrete options per field based on the data, never ask blank open-ended questions.",
@@ -212,6 +212,7 @@ export default function analysisIntentionExtension(pi: ExtensionAPI) {
     promptGuidelines: [
       "Call save_intention_draft with the full Intention object AFTER the final-suggestions step (when the user has confirmed the brief is complete).",
       "The intention object must include: goal, questions, stakeholders, successCriteria, dashboardOptions, assumptions, clarifications, openQuestions.",
+      "Include dataRequirements if you profiled the data during intake — capture what time period, service types, row count, and source the analysis expects.",
       "After saving, the page will be re-rendered and the registry updated automatically.",
       "Do not attempt to write files directly — use this tool.",
     ],
@@ -230,6 +231,16 @@ export default function analysisIntentionExtension(pi: ExtensionAPI) {
         { description: "Clarifications captured during interview" },
       ),
       openQuestions: Type.Array(Type.String(), { description: "Open questions to address later" }),
+      dataRequirements: Type.Optional(
+        Type.Object({
+          timePeriod: Type.Optional(Type.String({ description: "Expected time period, e.g. 'Jan-Mar 2024'" })),
+          serviceTypes: Type.Optional(Type.Array(Type.String(), { description: "Expected service types, e.g. ['yellow', 'green']" })),
+          minimumRows: Type.Optional(Type.Number({ description: "Minimum expected row count" })),
+          source: Type.Optional(Type.String({ description: "Expected data source, e.g. 'NYC TLC trip data'" })),
+          notes: Type.Optional(Type.String({ description: "Additional data context or limitations" })),
+        }),
+        { description: "Data requirements discovered during intake profiling" },
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (!isWorkspaceValid()) {

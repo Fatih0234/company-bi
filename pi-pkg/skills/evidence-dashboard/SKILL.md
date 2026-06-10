@@ -129,7 +129,16 @@ When building an Evidence report (not just exploring in draft), follow these pha
 - Identify what is worth showing in the report vs. what is noise
 - Reason through what the data actually says about the question
 - Distinguish between verified findings and assumptions
-- **[CHECKPOINT: Present findings to the user. Get alignment before proceeding to planning.]**
+
+**🛑 HARD STOP — Do not proceed to Phase 4 until the user explicitly approves.**
+
+Before writing any Report Plan or Evidence components, you MUST:
+1. Summarize 3-5 key findings in plain language
+2. Present them to the user via `ask_user`
+3. Wait for the user to confirm or redirect
+4. Only proceed after the user says "go ahead" or equivalent
+
+If you skip this step, the dashboard may be built on wrong assumptions.
 
 **Output:** A concise narrative of findings, clearly labeled as verified or assumed.
 
@@ -289,6 +298,56 @@ Build the report with proper syntax, using your plan and documentation as refere
 
 **Output:** A polished Evidence page that follows the plan, uses correct syntax, and tells the story effectively.
 
+### Post-write: Update report.md (REQUIRED)
+
+**After creating or substantially updating any question page (q1.md, q2.md, etc.), you MUST update `pages/report.md`.**
+
+This is the publishable entry point. If it still contains the starter template, the published dashboard will be empty.
+
+**Process:**
+1. After writing a page, check if report.md still has the starter template
+2. If yes, replace it with a summary/index that links to all question pages
+3. If no, add the new page to the existing index table
+
+**Default report.md template (use when question pages exist):**
+
+```markdown
+---
+title: "[Analysis Title]"
+---
+
+# [Analysis Title]
+
+> [One-sentence summary of the overall strategy]
+
+## Questions Explored
+
+| # | Question | Key Finding | Page |
+|---|----------|-------------|------|
+| 1 | [Question Name] | [One sentence finding] | [Q1](q1) |
+| 2 | [Question Name] | [One sentence finding] | [Q2](q2) |
+...
+
+## Executive Summary
+
+[Brief 2-3 sentence summary of the overall recommendation]
+
+## Data Sources
+
+- [Source 1]: [Description]
+- [Source 2]: [Description]
+
+## Assumptions
+
+- [Assumption 1]
+- [Assumption 2]
+```
+
+**Rules:**
+- Update the Key Finding column after each page is completed
+- Keep the Executive Summary aligned with the latest findings
+- The report.md file is what gets published at `/reports/<slug}/`
+
 ### Workflow summary
 
 ```
@@ -390,9 +449,35 @@ When the user asks whether the dashboard looks correct, or after substantial edi
 
 1. Find the active preview URL from the injected dynamic context, `.cmux/workspace.json`, or `<workspace-helper> preview-url`.
 2. Use CMUX browser automation if a browser surface is available.
-3. Snapshot or evaluate the page.
-4. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
-5. Report what was visually confirmed and what still requires human judgment.
+3. **Scroll to the top of the page first** — `cmux browser <surface> eval "window.scrollTo(0, 0)"`
+4. Take a screenshot — captures the top section (KPIs, first charts)
+5. **Scroll down and take additional screenshots** to cover the full page:
+   - `cmux browser <surface> scroll --dy <viewport-height>` to advance
+   - `cmux browser <surface> screenshot --out /tmp/evidence-preview-<n>.png`
+   - Repeat until the bottom of the page is reached
+6. Look for Evidence build/runtime errors, blank sections, missing data, or obvious layout issues.
+7. Report what was visually confirmed and what still requires human judgment.
+
+### Full-page validation checklist
+
+After writing a substantial page (3+ charts or sections), verify:
+
+- [ ] KPI cards at the top show actual values (not "—" or empty)
+- [ ] All charts render with data (no blank/empty chart areas)
+- [ ] Tables show rows (not "No records")
+- [ ] Layout is correct (no overlapping or misaligned sections)
+- [ ] No Evidence build errors in the console
+
+### Saving snapshots for audit trail
+
+After taking screenshots, save them to the workspace:
+
+```bash
+mkdir -p .pi/previews
+cp /tmp/evidence-preview-*.png .pi/previews/
+```
+
+This creates a visual audit trail in `.pi/previews/` that persists across sessions.
 
 Use the workspace helper shown in dynamic context first. In content-only workspaces this is usually an absolute runtime helper path because `./bin/cmux-evidence` does not exist in the content workspace.
 

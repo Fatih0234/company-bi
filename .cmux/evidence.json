@@ -28,7 +28,8 @@
     "data/**",
     ".cmux/workspace.json",
     ".cmux/data-profile.json",
-    ".pi/duckdb/**"
+    ".pi/duckdb/**",
+    ".pi/previews/**"
   ],
   "askBeforeAgentPaths": [
     "sources/**",

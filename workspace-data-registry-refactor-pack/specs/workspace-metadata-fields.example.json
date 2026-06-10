@@ -1,0 +1,21 @@
+{
+  "kind": "lumen-analysis-workspace",
+  "workspaceMode": "content-only",
+  "projectId": "company-bi",
+  "title": "Sales performance",
+  "slug": "sales-performance",
+  "workspaceRoot": "/path/to/workspace",
+  "shadowRuntimeRoot": "/path/to/runtime/sales-performance",
+  "runtimeRoot": "/path/to/company-bi",
+  "page": "pages/index.md",
+  "pages": {
+    "brief": "pages/index.md",
+    "draft": "pages/draft.md",
+    "report": "pages/report.md"
+  },
+  "dataRegistry": ".cmux/data-registry.json",
+  "dataProfile": ".cmux/data-profile.json",
+  "port": 3100,
+  "url": "http://localhost:3100",
+  "status": "draft"
+}

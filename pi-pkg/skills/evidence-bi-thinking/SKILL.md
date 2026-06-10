@@ -64,6 +64,22 @@ Decision labels:
 - `explore` — test in draft first;
 - `drop` — possible but not decision-relevant enough.
 
+### Discarded candidates
+
+After the scan, add a section documenting what was considered and dropped:
+
+```markdown
+## Discarded Candidates
+
+| Candidate | Why dropped |
+|---|---|
+| [name] | [reason — not decision-relevant, data insufficient, too noisy, etc.] |
+```
+
+If no candidates were dropped, state: "All candidates were kept — the dataset is focused enough that every analytical angle is decision-relevant."
+
+This creates an analytical audit trail. If a stakeholder asks "why didn't you look at X?", the answer is documented.
+
 ---
 
 ## Required output: Report Design Plan

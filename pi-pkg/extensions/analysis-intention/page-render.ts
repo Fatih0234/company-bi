@@ -166,7 +166,21 @@ export function renderAnalysisPage(title: string, slug: string, intention: Inten
         .join("\n")
     : "| — | No questions captured yet. | — |";
 
-  // JSON-encode the title for YAML frontmatter (handles quotes, escapes)
+  // Build data requirements section
+  const dr = intention.dataRequirements;
+  let dataRequirementsSection = "";
+  if (dr) {
+    const parts: string[] = [];
+    if (dr.timePeriod) parts.push(`- **Time period**: ${dr.timePeriod}`);
+    if (dr.serviceTypes?.length) parts.push(`- **Service types**: ${dr.serviceTypes.join(", ")}`);
+    if (dr.minimumRows) parts.push(`- **Minimum rows**: ${dr.minimumRows.toLocaleString()}`);
+    if (dr.source) parts.push(`- **Source**: ${dr.source}`);
+    if (dr.notes) parts.push(`- **Notes**: ${dr.notes}`);
+    if (parts.length) {
+      dataRequirementsSection = `\n### Data requirements\n\n${parts.join("\n")}\n`;
+    }
+  }
+
   const titleYaml = JSON.stringify(title);
 
   return `---
@@ -202,7 +216,7 @@ ${bullets(dashboardOptions)}
 ### Assumptions
 
 ${bullets(assumptions)}
-
+${dataRequirementsSection}
 ### Clarifications captured during onboarding
 
 ${bullets(clarifications, "No clarifications captured yet.")}

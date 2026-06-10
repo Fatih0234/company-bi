@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "updatedAt": "2026-06-09T00:00:00Z",
+  "tables": {
+    "files.orders": {
+      "rowCount": 1000,
+      "columnCount": 5,
+      "columns": {
+        "order_id": {
+          "type": "VARCHAR",
+          "nullCount": 0,
+          "distinctApprox": 1000,
+          "semanticRole": "id"
+        },
+        "order_date": {
+          "type": "DATE",
+          "nullCount": 0,
+          "min": "2026-01-01",
+          "max": "2026-03-31",
+          "semanticRole": "time"
+        },
+        "revenue": {
+          "type": "DOUBLE",
+          "nullCount": 0,
+          "min": 0,
+          "max": 9999.99,
+          "semanticRole": "measure"
+        }
+      },
+      "warnings": [],
+      "suggestedQuestions": [
+        "How does revenue trend over time?",
+        "Which customer segments drive the most revenue?"
+      ]
+    }
+  }
+}

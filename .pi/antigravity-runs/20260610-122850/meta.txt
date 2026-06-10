@@ -1,0 +1,8 @@
+run_id=20260610-122850
+project_dir=/Volumes/T7/projects/company-bi
+agy_workspace=/Users/fatihkarahan/.pi/antigravity-sidecar-workspace/runs/20260610-122850
+agy_reasoning=high
+agy_model=Gemini 3.5 Flash (High)
+mode=file
+task_file=.pi/antigravity-briefs/20260610-data-refresh-blocker.md
+purpose=web-research-only

@@ -1,0 +1,17 @@
+{
+  "name": "pi-attach-files-extension",
+  "private": true,
+  "type": "module",
+  "description": "PI Coding Agent extension that opens macOS file picker and copies selected files into a project folder.",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./attach-files.ts"
+    ]
+  }
+}

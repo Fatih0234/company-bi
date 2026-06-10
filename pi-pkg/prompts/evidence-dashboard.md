@@ -30,9 +30,13 @@ Structure each page as a story:
 2. **Filters for interactivity** — 2-3 meaningful filters, not everything.
 3. **KPIs at top** — the 3 numbers that matter most.
 4. **Always use fmt=** — currency (`$#,##0`), percentages (`0.0%`), integers (`#,##0`).
-5. **Test SQL first** — run queries through `duckdb_run_sql` before writing them into pages.
-6. **Visual hierarchy** — big things are important, small things are details.
-7. **Consistent formatting** — same currency format everywhere, same percentage format.
+5. **fmt= gotcha — Svelte attribute parsing** — Evidence components are rendered by Svelte. Values with spaces or double quotes inside `fmt=` break Svelte's HTML parser, causing a 500 error. Safe patterns:
+   - ✅ `fmt=num0` `fmt=num1` `fmt=$#,##0` `fmt=$#,##0.00` `fmt=pct0` `fmt=pct1`
+   - ❌ `fmt=#,##0.0 "mi"` `fmt=$#,##0.00 USD` `fmt=0.0% (YoY)`
+   - If you need unit labels, put them in the `title` prop or in surrounding markdown text, not in `fmt=`.
+6. **Test SQL first** — run queries through `duckdb_run_sql` before writing them into pages.
+7. **Visual hierarchy** — big things are important, small things are details.
+8. **Consistent formatting** — same currency format everywhere, same percentage format.
 
 ## Documentation
 
@@ -70,7 +74,16 @@ Output: Raw findings, query results, patterns discovered.
 - Identify what is worth showing in the report vs. what is noise
 - Reason through what the data actually says about the question
 - Distinguish between verified findings and assumptions
-- [CHECKPOINT: Present findings to the user. Get alignment before proceeding.]
+
+**🛑 HARD STOP — Do not proceed to Phase 4 until the user explicitly approves.**
+
+Before writing any Report Plan or Evidence components, you MUST:
+1. Summarize 3-5 key findings in plain language
+2. Present them to the user via `ask_user`
+3. Wait for the user to confirm or redirect
+4. Only proceed after the user says "go ahead" or equivalent
+
+If you skip this step, the dashboard may be built on wrong assumptions.
 
 Output: A concise narrative of findings, clearly labeled as verified or assumed.
 

@@ -1,0 +1,7 @@
+order_id,customer_id,order_date,revenue,region,product_category
+1,c_001,2026-01-05,120.50,North,Software
+2,c_002,2026-01-06,88.00,South,Services
+3,c_001,2026-02-01,210.25,North,Software
+4,c_003,2026-02-12,340.00,West,Hardware
+5,c_004,2026-03-03,75.50,East,Services
+6,c_002,2026-03-18,415.00,South,Software

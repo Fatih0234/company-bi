@@ -2599,6 +2599,136 @@ def usage() -> str:
 # data subcommands
 # ---------------------------------------------------------------------------
 
+def data_build_command(slug: str | None = None) -> int:
+    """Build staging DuckDB from build/*.sql files."""
+    try:
+        workspace_root = _resolve_workspace_root_for_data(slug)
+    except (TypeError, ValueError) as exc:
+        return error(str(exc))
+
+    build_dir = workspace_root / "build"
+    if not build_dir.is_dir():
+        print(
+            "No build/ directory found.\n\n"
+            "Create build/*.sql files with CREATE TABLE AS statements.\n"
+            "Use 'raw/' prefix to reference workspace-data/raw/ files.\n\n"
+            "Example build/trips_by_hour.sql:\n"
+            "  CREATE TABLE trips_by_hour AS\n"
+            "  SELECT hour, COUNT(*) as trips\n"
+            "  FROM read_parquet('raw/data.parquet')\n"
+            "  GROUP BY 1;"
+        )
+        return 1
+
+    sql_files = sorted(build_dir.glob("*.sql"))
+    if not sql_files:
+        print("No .sql files found in build/")
+        return 1
+
+    # Determine output path
+    sources_dir = workspace_root / "sources" / "files"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    staging_db = sources_dir / "data.duckdb"
+
+    # Remove old staging DB if it exists
+    if staging_db.exists():
+        staging_db.unlink()
+
+    # Resolve raw data path (workspace-data/raw)
+    raw_data_root = workspace_root / "workspace-data" / "raw"
+    if not raw_data_root.is_dir():
+        # Try data/ as fallback for workspaces that use data/ directly
+        raw_data_root = workspace_root / "data"
+
+    raw_data_root = raw_data_root.resolve()
+
+    print(heading(f"Building staging DB: {staging_db.relative_to(workspace_root)}"))
+    print(f"  Raw data root: {raw_data_root}")
+    print(f"  Build files: {len(sql_files)}")
+    print()
+
+    # Execute each build SQL file
+    tables_built = []
+    for sql_file in sql_files:
+        table_name = sql_file.stem
+        print(f"  {muted(table_name)}... ", end="", flush=True)
+
+        # Read SQL and rewrite raw/ paths to absolute paths
+        sql = sql_file.read_text()
+        sql = sql.replace("'raw/", f"'{raw_data_root}/")
+
+        # Execute against DuckDB
+        try:
+            result = subprocess.run(
+                ["duckdb", str(staging_db)],
+                input=sql,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if result.returncode != 0:
+                err = result.stderr.strip().split("\n")[-1] if result.stderr else "Unknown error"
+                print(f"{error_text('FAILED')}: {err}")
+                continue
+
+            # Get row count
+            count_result = subprocess.run(
+                ["duckdb", str(staging_db), "-c", f"SELECT count(*) FROM {table_name};"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            row_count = "?"
+            if count_result.returncode == 0:
+                # Parse row count from DuckDB output (format: │ 9554722 │)
+                for line in count_result.stdout.strip().split("\n"):
+                    line = line.strip()
+                    if line.startswith("│") and line.endswith("│"):
+                        val = line.strip("│ ").strip()
+                        if val.isdigit():
+                            row_count = f"{int(val):,}"
+                            break
+
+            print(f"{success_text('OK')} ({row_count} rows)")
+            tables_built.append(table_name)
+
+        except subprocess.TimeoutExpired:
+            print(f"{error_text('TIMEOUT')}")
+        except Exception as e:
+            print(f"{error_text('ERROR')}: {e}")
+
+    if not tables_built:
+        print(f"\n{error_text('No tables built. Check your build SQL files.')}")
+        return 1
+
+    # Auto-generate connection.yaml
+    conn_yaml = sources_dir / "connection.yaml"
+    conn_yaml.write_text(
+        f"name: files\n"
+        f"type: duckdb\n"
+        f"options:\n"
+        f"  filename: \"data.duckdb\"\n"
+    )
+
+    # Auto-generate source SQL files for each table
+    for table_name in tables_built:
+        sql_path = sources_dir / f"{table_name}.sql"
+        sql_path.write_text(f"select * from {table_name}\n")
+
+    # Also remove any stale source SQL files for tables that no longer exist
+    for existing_sql in sources_dir.glob("*.sql"):
+        if existing_sql.stem not in tables_built and existing_sql.stem != "connection":
+            # Don't remove if it was just created
+            if existing_sql.name not in [f"{t}.sql" for t in tables_built]:
+                existing_sql.unlink()
+
+    print(f"\n{success_text(f'Built {len(tables_built)} tables')}")
+    print(f"  Staging DB: {staging_db.relative_to(workspace_root)}")
+    print(f"  Sources: {conn_yaml.relative_to(workspace_root)}")
+    print(f"\nNext: cmux-evidence data refresh")
+    return 0
+
+
 def data_command(args: list[str]) -> int:
     """Dispatch for 'cmux-evidence data ...' subcommands."""
     sub = args[0] if args else ""
@@ -2611,17 +2741,20 @@ def data_command(args: list[str]) -> int:
         return data_list_command(slug)
     if sub == "refresh":
         return data_refresh_command(slug)
+    if sub == "build":
+        return data_build_command(slug)
     print(
         "Usage: cmux-evidence data <subcommand> [workspace-slug]\n"
         "\n"
         "Subcommands:\n"
         "  list      Show registered workspace data tables\n"
+        "  build     Build staging DuckDB from build/*.sql files\n"
         "  refresh   Scan data files, update registry, generate source SQL\n"
         "\n"
         "If called from inside a workspace, the workspace is auto-detected.\n"
         "If called from the project root, pass the workspace slug as the last argument.\n"
         "Example:\n"
-        "  cmux-evidence data refresh my-analysis\n"
+        "  cmux-evidence data build my-analysis\n"
     )
     return 1
 
@@ -2767,28 +2900,34 @@ def data_refresh_command(slug: str | None = None) -> int:
     # Print summary
     print(wdr.print_registry_summary(registry))
 
-    # Run Evidence sources for files if ready tables exist
+    # Inject sources directly into .evidence/meta/files/ (much faster than npm run sources)
     if ready_tables:
-        sources_dir = shadow_root / "sources" / wdr.GENERATED_FILES_SOURCE_NAME
-        if sources_dir.is_dir():
-            print()
-            print("Running Evidence source extraction...")
-            try:
-                result = subprocess.run(
-                    ["npm", "run", "sources", "--", "--sources", wdr.GENERATED_FILES_SOURCE_NAME],
-                    cwd=str(shadow_root),
-                    check=False,
-                    text=True,
-                    capture_output=True,
-                )
-                if result.returncode == 0:
-                    print("Evidence sources updated successfully.")
-                else:
-                    print(f"Warning: Evidence source extraction returned {result.returncode}")
-                    if result.stderr:
-                        print(result.stderr[:500])
-            except OSError as exc:
-                print(f"Warning: could not run Evidence sources: {exc}")
+        print()
+        print("Injecting Evidence sources...")
+        result = wdr.inject_evidence_sources(workspace_root, shadow_root, registry)
+        
+        if result["status"] == "success":
+            print(f"Evidence sources injected successfully: {result['injected']} file(s)")
+        elif result["status"] == "partial":
+            print(f"Evidence sources partially injected: {result['injected']} file(s), {result['skipped']} skipped")
+            if result["errors"]:
+                print("Errors:")
+                for error in result["errors"]:
+                    print(f"  - {error}")
+        else:
+            print(f"Evidence sources injection: {result['status']}")
+        
+        # Verify all tables are available
+        evidence_meta_dir = shadow_root / ".evidence" / "meta" / "files"
+        expected_tables = {t["alias"] for t in ready_tables}
+        available = {d.name for d in evidence_meta_dir.iterdir() if d.is_dir()} if evidence_meta_dir.exists() else set()
+        missing = expected_tables - available
+        
+        if missing:
+            print(f"\nWarning: {len(missing)} table(s) still missing: {', '.join(sorted(missing))}")
+            print("Dashboard queries may fail for missing tables.")
+        else:
+            print("All tables are available for dashboard queries.")
 
     return 0
 

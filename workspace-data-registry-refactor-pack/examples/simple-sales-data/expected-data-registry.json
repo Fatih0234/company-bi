@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "sourceName": "files",
+  "tables": [
+    {
+      "alias": "orders",
+      "qualifiedName": "files.orders",
+      "path": "data/orders.csv",
+      "format": "csv",
+      "status": "ready"
+    },
+    {
+      "alias": "customers",
+      "qualifiedName": "files.customers",
+      "path": "data/customers.csv",
+      "format": "csv",
+      "status": "ready"
+    }
+  ],
+  "warnings": []
+}

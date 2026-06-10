@@ -10,6 +10,14 @@ export interface Clarification {
   answer: string;
 }
 
+export interface DataRequirements {
+  timePeriod?: string;       // e.g., "Jan-Mar 2024", "Q1 2024"
+  serviceTypes?: string[];   // e.g., ["yellow", "green"]
+  minimumRows?: number;      // e.g., 100000
+  source?: string;           // e.g., "NYC TLC trip data"
+  notes?: string;            // any additional data context
+}
+
 export interface Intention {
   goal: string;
   questions: string[];
@@ -19,6 +27,7 @@ export interface Intention {
   assumptions: string[];
   clarifications: Clarification[];
   openQuestions: string[];
+  dataRequirements?: DataRequirements;
 }
 
 export function emptyIntention(): Intention {
@@ -76,6 +85,17 @@ export function renderIntentionBullets(intention: Intention): string[] {
       })
       .filter(Boolean);
     if (rendered.length) lines.push(`- Clarifications: ${rendered.join("; ")}`);
+  }
+
+  const dr = intention.dataRequirements;
+  if (dr) {
+    const parts: string[] = [];
+    if (dr.timePeriod) parts.push(`time period: ${dr.timePeriod}`);
+    if (dr.serviceTypes?.length) parts.push(`service types: ${dr.serviceTypes.join(", ")}`);
+    if (dr.minimumRows) parts.push(`minimum rows: ${dr.minimumRows.toLocaleString()}`);
+    if (dr.source) parts.push(`source: ${dr.source}`);
+    if (dr.notes) parts.push(`notes: ${dr.notes}`);
+    if (parts.length) lines.push(`- Data requirements: ${parts.join("; ")}`);
   }
 
   return lines;

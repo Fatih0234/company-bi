@@ -17,9 +17,79 @@ This extension enforces validation **before** page writes are allowed:
 
 | Checkpoint | What We Check | Enforcement |
 |------------|---------------|-------------|
+| **Insight Candidate Scan** | `draft.md` must contain required planning sections | Hard block |
+| **Data Profiling** | Data must be profiled before writing SQL queries | Hard block |
+| **Documentation Lookup** | Component docs must be read before using components | Hard block |
 | **Query Validation** | SQL queries must be run via `duckdb_run_sql` | Hard block |
 | **Empty Dataset Detection** | Queries must return `row_count > 0` | Hard block |
 | **Static Analysis** | No Svelte/HTML rendering issues | Hard block |
+| **Chart Title Quality** | Titles should be insight-first, not descriptive | Warning |
+| **Review Completed** | Pages should be validated before publishing | Checklist |
+
+### Insight Candidate Scan Enforcement
+
+Before writing to any page except `draft.md` and `index.md`, the extension verifies that `pages/draft.md` contains:
+
+- `## Insight Candidate Scan`
+- `## Report Design Plan`
+
+This enforces the **evidence-bi-thinking** workflow:
+1. Generate insight candidates (analytical moves)
+2. Write the Report Design Plan to `draft.md`
+3. Get user alignment on the plan
+4. Then write to the target page
+
+If these sections are missing, the write is blocked with instructions to run the `evidence-bi-thinking` skill first.
+
+### Data Profiling Enforcement
+
+Before writing to pages with SQL queries, the extension verifies that data profiling was performed:
+
+- `duckdb_summarize_table` — for distribution, distinct counts, and findings
+- `duckdb_describe_table` — for column names and types
+- `duckdb_quality_report` — for data quality issues
+
+This enforces the **data-discovery** workflow:
+1. Profile the data first
+2. Understand column types, distributions, and quality issues
+3. Then write SQL queries with confidence
+
+If no profiling calls are detected, the write is blocked.
+
+### Documentation Lookup Enforcement
+
+Before writing to pages with Evidence components (BarChart, LineChart, BigValue, etc.), the extension verifies that documentation was consulted:
+
+- Read `.agent/docs/evidence-oss/ROUTES.md` for task-based routing
+- Follow links to specific component documentation
+- Extract exact props, syntax, and patterns
+
+This prevents guessing component props and getting them wrong.
+
+If no documentation reads are detected, the write is blocked.
+
+### Chart Title Quality Check
+
+The extension now checks for generic/descriptive chart titles and encourages insight-first titles:
+
+**Generic titles (flagged as warnings):**
+- "Revenue by Zone"
+- "Top 10 Areas"
+- "Monthly Trends"
+- "Distribution of Fares"
+
+**Insight-first titles (preferred):**
+- "Airports generate 3x more revenue per trip"
+- "East Village leads pickup volume"
+- "Revenue peaked in January before declining"
+
+The check also verifies that charts have interpretation text after them explaining the insight.
+
+### Review Before Publishing
+
+The extension tracks page validations as "review activity". Before marking a dashboard as ready, the `evidence_dashboard_readiness` tool checks that at least one page was validated using `evidence_validate_page`.
+
+This ensures the dashboard has been reviewed before publication.
 
 ## How It Works
 
@@ -28,30 +98,93 @@ Agent writes page
        │
        ▼
 ┌──────────────────┐
-│ tool_result      │
+│ tool_call        │
 │ (write/edit)     │
 └────────┬─────────┘
          │
          ▼
-┌──────────────────┐     ┌──────────────────┐
-│ Extract SQL      │     │ Check query      │
-│ blocks from      │────►│ validation cache │
-│ page content     │     │                  │
-└──────────────────┘     └────────┬─────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    │                           │
-              ┌─────▼─────┐               ┌─────▼─────┐
-              │ All valid │               │ Not valid │
-              │ and have  │               │ or empty  │
-              │ data?     │               │           │
-              └─────┬─────┘               └─────┬─────┘
-                    │                           │
-                    ▼                           ▼
-              ┌───────────┐             ┌───────────────┐
-              │ Allow     │             │ HARD BLOCK    │
-              │ write     │             │ Return error  │
-              └───────────┘             └───────────────┘
+┌──────────────────┐
+│ Is target page   │
+│ draft.md or      │──── Yes ──► Skip Insight Scan check
+│ index.md?        │
+└────────┬─────────┘
+         │ No
+         ▼
+┌──────────────────┐
+│ Check draft.md   │
+│ for required     │
+│ planning sections│
+└────────┬─────────┘
+         │
+    ┌────┴────┐
+    │         │
+ Missing   Present
+    │         │
+    ▼         ▼
+┌────────┐ ┌──────────────────┐
+│ BLOCK  │ │ Check if page    │
+│ with   │ │ has SQL queries  │
+│ action │ └────────┬─────────┘
+│ items  │          │
+└────────┘    ┌─────┴─────┐
+              │           │
+          Has SQL     No SQL
+              │           │
+              ▼           ▼
+    ┌─────────────┐   Skip
+    │ Data        │   profiling
+    │ profiled?   │   check
+    └──────┬──────┘
+           │
+      ┌────┴────┐
+      │         │
+    No        Yes
+      │         │
+      ▼         ▼
+┌──────────┐ ┌──────────────────┐
+│ BLOCK    │ │ Check if page    │
+│ requires │ │ has components   │
+│ profiling│ └────────┬─────────┘
+└──────────┘          │
+                ┌─────┴─────┐
+                │           │
+            Has comps   No comps
+                │           │
+                ▼           ▼
+      ┌─────────────┐   Skip
+      │ Docs        │   doc check
+      │ read?       │
+      └──────┬──────┘
+             │
+        ┌────┴────┐
+        │         │
+      No        Yes
+        │         │
+        ▼         ▼
+  ┌──────────┐ ┌──────────────────┐
+  │ BLOCK    │ │ Extract SQL      │
+  │ requires │ │ blocks from      │
+  │ docs     │ │ page content     │
+  └──────────┘ └────────┬─────────┘
+                        │
+                        ▼
+             ┌──────────────────┐
+             │ Check query      │
+             │ validation cache │
+             └────────┬─────────┘
+                      │
+             ┌────────┴────────┐
+             │                 │
+        ┌────▼────┐      ┌────▼────┐
+        │ All     │      │ Not     │
+        │ valid?  │      │ valid   │
+        └────┬────┘      └────┬────┘
+             │                │
+             ▼                ▼
+       ┌──────────┐    ┌───────────┐
+       │ Allow    │    │ HARD      │
+       │ write    │    │ BLOCK     │
+       └──────────┘    └───────────┘
 ```
 
 ## Installation
@@ -118,12 +251,35 @@ The page write was blocked because of validation errors.
 - `/evidence-quality-status` - Show cache status and stats
 - `/evidence-quality-clear-cache` - Clear the query validation cache
 
-### Manual Validation Tool
+### Tools
 
-Use the `evidence_validate_page` tool to check a page before writing:
+| Tool | Purpose |
+|------|--------|
+| `evidence_validate_page` | Validate a single page for query validation and rendering issues |
+| `evidence_dashboard_readiness` | Check if a dashboard is ready for publication (all quality gates) |
+
+### Dashboard Readiness Checklist
+
+Run `evidence_dashboard_readiness` at the end of a dashboard build to verify all quality gates:
 
 ```
-evidence_validate_page path="pages/analysis/my-dashboard.md"
+evidence_dashboard_readiness workspacePath="/Volumes/T7/projects/company-bi"
+```
+
+Output:
+```
+## Dashboard Readiness Checklist
+
+✅ **All checks passed — dashboard is ready for review/publishing**
+
+### Checks
+
+- ✅ **Data Profiled**: 3 tables profiled: files.trips, files.zones, files.taxi_zone_lookup
+- ✅ **Insight Candidate Scan**: Found in draft.md
+- ✅ **Report Design Plan**: Found in draft.md
+- ✅ **Documentation Consulted**: 5 docs read
+- ✅ **SQL Queries Validated**: 12 queries validated
+- ✅ **Report Page Exists**: report.md found
 ```
 
 ## Components

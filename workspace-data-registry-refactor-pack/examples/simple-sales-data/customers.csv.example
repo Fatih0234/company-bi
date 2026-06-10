@@ -1,0 +1,5 @@
+customer_id,segment,country,signup_date
+c_001,Enterprise,DE,2025-01-01
+c_002,SMB,DE,2025-02-15
+c_003,Enterprise,NL,2025-03-10
+c_004,Mid-Market,DE,2025-04-20

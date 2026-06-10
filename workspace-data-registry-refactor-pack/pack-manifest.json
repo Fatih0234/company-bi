@@ -1,0 +1,13 @@
+{
+  "name": "workspace-data-registry-refactor-pack",
+  "createdAt": "2026-06-09T19:07:22Z",
+  "purpose": "Implementation handoff pack for refactoring company-bi to workspace-local file data registry",
+  "priorityRead": [
+    "README.md",
+    "03-non-negotiable-invariants.md",
+    "04-file-by-file-refactor-plan.md",
+    "06-data-registry-spec.md",
+    "07-shadow-runtime-source-generation-spec.md",
+    "11-tests-and-validation-plan.md"
+  ]
+}

@@ -434,3 +434,188 @@ def print_list_summary(registry: dict[str, Any]) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip()
+
+
+# ---------------------------------------------------------------------------
+# Direct parquet injection (bypass npm run sources)
+# ---------------------------------------------------------------------------
+
+def inject_evidence_sources(
+    workspace_root: Path,
+    shadow_root: Path,
+    registry: dict[str, Any],
+) -> dict[str, Any]:
+    """Inject source data directly into .evidence/meta/files/ bypassing npm run sources.
+
+    This is much faster than running npm run sources (seconds vs minutes).
+    For parquet files: copies directly.
+    For CSV/TSV/JSON: converts to parquet using DuckDB.
+    Also generates .schema.json metadata.
+
+    Returns a dict with status information.
+    """
+    import shutil
+
+    ready_tables = [t for t in registry.get("tables", []) if t.get("status") == "ready"]
+    if not ready_tables:
+        return {"status": "no_ready_tables", "injected": 0, "skipped": 0, "errors": []}
+
+    evidence_meta_dir = shadow_root / ".evidence" / "meta" / "files"
+    evidence_meta_dir.mkdir(parents=True, exist_ok=True)
+
+    injected = 0
+    skipped = 0
+    errors = []
+    schema_data = {}
+
+    for table in ready_tables:
+        alias = table["alias"]
+        file_path = table["path"]
+        fmt = table.get("format", "csv")
+        source_file = workspace_root / file_path
+
+        if not source_file.exists():
+            errors.append(f"File not found: {file_path}")
+            continue
+
+        target_dir = evidence_meta_dir / alias
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if already injected (same fingerprint)
+        target_parquet = target_dir / f"{alias}.parquet"
+        if target_parquet.exists():
+            # Check if source has changed
+            source_fingerprint = fingerprint_file(source_file)
+            if source_fingerprint == table.get("fingerprint"):
+                skipped += 1
+                # Still need to add to schema
+                schema_data[alias] = _get_schema_from_parquet(target_parquet)
+                continue
+
+        try:
+            if fmt == "parquet":
+                # Direct copy for parquet files
+                shutil.copy2(source_file, target_parquet)
+            else:
+                # Convert to parquet using DuckDB
+                _convert_to_parquet(source_file, fmt, target_parquet)
+
+            # Generate schema
+            schema_data[alias] = _get_schema_from_parquet(target_parquet)
+            injected += 1
+        except Exception as e:
+            errors.append(f"Error injecting {alias}: {str(e)}")
+
+    # Write schema file
+    if schema_data:
+        schema_file = evidence_meta_dir / ".schema.json"
+        schema_file.write_text(json.dumps(schema_data, indent=2) + "\n")
+
+    # Generate manifest file for Evidence
+    _generate_evidence_manifest(shadow_root, ready_tables, injected + skipped > 0)
+
+    return {
+        "status": "success" if not errors else "partial",
+        "injected": injected,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+def _convert_to_parquet(source_file: Path, fmt: str, target_parquet: Path) -> None:
+    """Convert CSV/TSV/JSON to parquet using DuckDB."""
+    import duckdb
+
+    # Build the read expression based on format
+    source_str = str(source_file).replace("'", "''")
+    if fmt == "csv":
+        read_expr = f"read_csv_auto('{source_str}')"
+    elif fmt == "tsv":
+        read_expr = f"read_csv_auto('{source_str}', delim='\t')"
+    elif fmt in ("json", "jsonl"):
+        read_expr = f"read_json_auto('{source_str}')"
+    else:
+        read_expr = f"read_csv_auto('{source_str}')"
+
+    # Convert to parquet
+    target_str = str(target_parquet).replace("'", "''")
+    duckdb.query(f"COPY (SELECT * FROM {read_expr}) TO '{target_str}' (FORMAT PARQUET)")
+
+
+def _get_schema_from_parquet(parquet_file: Path) -> list[dict[str, str]]:
+    """Extract schema from a parquet file using DuckDB."""
+    import duckdb
+
+    parquet_str = str(parquet_file).replace("'", "''")
+    result = duckdb.query(f"DESCRIBE SELECT * FROM read_parquet('{parquet_str}')")
+
+    schema = []
+    for row in result.fetchall():
+        col_name = row[0]
+        col_type = row[1]
+
+        # Map DuckDB types to Evidence types
+        evidence_type = _duckdb_type_to_evidence(col_type)
+        schema.append({
+            "name": col_name,
+            "type": evidence_type,
+            "evidenceType": evidence_type,
+        })
+
+    return schema
+
+
+def _duckdb_type_to_evidence(duckdb_type: str) -> str:
+    """Map DuckDB types to Evidence types."""
+    duckdb_type = duckdb_type.upper()
+
+    if "INT" in duckdb_type or "DOUBLE" in duckdb_type or "FLOAT" in duckdb_type or "DECIMAL" in duckdb_type:
+        return "number"
+    elif "VARCHAR" in duckdb_type or "CHAR" in duckdb_type or "TEXT" in duckdb_type:
+        return "string"
+    elif "DATE" in duckdb_type or "TIMESTAMP" in duckdb_type:
+        return "date"
+    elif "BOOL" in duckdb_type:
+        return "boolean"
+    else:
+        return "string"
+
+
+def _generate_evidence_manifest(
+    shadow_root: Path,
+    ready_tables: list[dict[str, Any]],
+    has_data: bool,
+) -> None:
+    """Generate the Evidence manifest file that lists all source tables.
+
+    Evidence reads this manifest to discover available tables.
+    The manifest maps source names to parquet file paths.
+    """
+    evidence_data_dir = shadow_root / ".evidence" / "data"
+    evidence_data_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = evidence_data_dir / "manifest.json"
+
+    # Build renderedFiles dictionary
+    # Format: { "source_name": ["path/to/table.parquet", ...] }
+    rendered_files = {}
+
+    for table in ready_tables:
+        alias = table["alias"]
+        # Evidence expects paths relative to .evidence/data/
+        # The parquet files are in .evidence/meta/files/<alias>/<alias>.parquet
+        parquet_path = f"../meta/files/{alias}/{alias}.parquet"
+        
+        # Group by source name (always "files" for our generated sources)
+        source_name = "files"
+        if source_name not in rendered_files:
+            rendered_files[source_name] = []
+        rendered_files[source_name].append(parquet_path)
+
+    manifest = {
+        "renderedFiles": rendered_files,
+        "locatedSchemas": list(rendered_files.keys()),
+        "locatedFiles": {k: [Path(p).stem for p in v] for k, v in rendered_files.items()},
+    }
+
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")

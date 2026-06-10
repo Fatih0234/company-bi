@@ -1,0 +1,93 @@
+{
+  "sourceName": "files",
+  "tables": [
+    {
+      "alias": "green_tripdata_2024_01",
+      "columns": [],
+      "fingerprint": "size:1362284;mtime:2026-06-04T14:53:20.210628+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/green/green_tripdata_2024-01.parquet",
+      "qualifiedName": "files.green_tripdata_2024_01",
+      "rowCount": null,
+      "sizeBytes": 1362284,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "green_tripdata_2024_02",
+      "columns": [],
+      "fingerprint": "size:1283805;mtime:2026-06-04T14:53:20.210343+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/green/green_tripdata_2024-02.parquet",
+      "qualifiedName": "files.green_tripdata_2024_02",
+      "rowCount": null,
+      "sizeBytes": 1283805,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "green_tripdata_2024_03",
+      "columns": [],
+      "fingerprint": "size:1372372;mtime:2026-06-04T14:53:20.210532+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/green/green_tripdata_2024-03.parquet",
+      "qualifiedName": "files.green_tripdata_2024_03",
+      "rowCount": null,
+      "sizeBytes": 1372372,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "yellow_tripdata_2024_01",
+      "columns": [],
+      "fingerprint": "size:49961641;mtime:2026-06-04T14:53:20.114817+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/yellow/yellow_tripdata_2024-01.parquet",
+      "qualifiedName": "files.yellow_tripdata_2024_01",
+      "rowCount": null,
+      "sizeBytes": 49961641,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "yellow_tripdata_2024_02",
+      "columns": [],
+      "fingerprint": "size:50349284;mtime:2026-06-04T14:53:20.140102+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/yellow/yellow_tripdata_2024-02.parquet",
+      "qualifiedName": "files.yellow_tripdata_2024_02",
+      "rowCount": null,
+      "sizeBytes": 50349284,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "yellow_tripdata_2024_03",
+      "columns": [],
+      "fingerprint": "size:60078280;mtime:2026-06-04T14:53:20.149138+00:00",
+      "format": "parquet",
+      "path": "data/tlc/raw/yellow/yellow_tripdata_2024-03.parquet",
+      "qualifiedName": "files.yellow_tripdata_2024_03",
+      "rowCount": null,
+      "sizeBytes": 60078280,
+      "status": "ready",
+      "warnings": []
+    },
+    {
+      "alias": "taxi_zone_lookup",
+      "columns": [],
+      "fingerprint": "size:12331;mtime:2026-06-04T14:53:20.255574+00:00",
+      "format": "csv",
+      "path": "data/tlc/reference/taxi_zone_lookup.csv",
+      "qualifiedName": "files.taxi_zone_lookup",
+      "rowCount": null,
+      "sizeBytes": 12331,
+      "status": "ready",
+      "warnings": []
+    }
+  ],
+  "updatedAt": "2026-06-09T20:46:02Z",
+  "version": 1,
+  "warnings": [],
+  "workspaceRoot": "/Volumes/T7/projects/company-bi"
+}
